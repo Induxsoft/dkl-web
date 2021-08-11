@@ -1,0 +1,368 @@
+﻿#include "dkli.dkh"
+
+#!
+module "UIElements"
+{
+
+    #!
+    uie.prepareData::&params
+    {
+        ref t=@null
+
+        if field.exist(params,"datatable")
+        {
+            if not(isnull(field.obj(params,"datatable")))
+            {
+                ref t=field.obj(params,"datatable")
+            }
+        }
+
+        if isnull(t)
+        {
+            ref t=dbr.table(field.obj(params,"db"),field.str(params,"source"),field.dobj(params,"parameters",@null))
+        }
+        
+        params<"datatable*">:t
+
+        return t
+    }
+
+    #!
+    uie.dbSelect::&params
+    {
+
+        ref t=uie.prepareData(params)
+
+        ##
+        "#<field.dstr(params,'element','select')>"(id="#<field.dstr(params,'id','dbSelect_'+uuid())>" '#<htmlAttributesFromRec(field.dobj(params,"attributes",@null))>'="dbselect")
+        {
+            ##
+
+            if field.dstr(params,"first_value","")!="" && field.dstr(params,"first_text","")!=""
+            {
+                ##
+                option(value="#<field.str(params,'first_value')>"){$"#<field.str(params,'first_text')>" }
+                ##
+            }
+
+            for i=0;i<table.rows(t)
+            {
+                ref row:row.get(t,i)
+                ##
+                option(value="#<field.str(row, field.str(params,'value_field'))>" "#<ifstr(field.str(row, field.str(params,'value_field'))==field.dstr(params,'selected','') ,'selected','')>"="true"){$"#<field.str(row, field.str(params,'text_field'))>"}
+                ##
+            }
+            ##
+        }
+    }
+
+    #!
+    uie.new_record::
+    {
+        new record{}
+        return record
+    }
+
+    #!
+    uie.avg:: n,c
+    {
+        return (n/c)
+
+        exception
+        {
+            return 0
+        }
+    }
+
+    #!
+    uie.prepareSummaries:: &params
+    {
+        params<"summaries*">:uie.new_record()
+        params<"summaries/sum*">:uie.new_record()
+        params<"summaries/avg*">:uie.new_record()
+        params<"summaries/max*">:uie.new_record()
+        params<"summaries/min*">:uie.new_record()
+        params<"summaries/groups*">:uie.new_record()
+    }
+
+    #!
+    uie.updateSummary::&params,&row
+    {
+        ref lcol=list.create_from_fields(field.obj(params,"columns"))
+        key=""
+
+        do uie.updateSummaryCol(params,"summaries/count", 1, "sum")
+
+        if field.dstr(params,"group_by","")!=""
+        {
+            key=uie.preparaSummaryGroup(params, field.str(row,field.str(params,"group_by")))
+            do uie.updateSummaryCol(params,"summaries/groups/"+key+"/count", 1, "sum")
+        }
+
+        for i=0;i<list.count(lcol)
+        {
+            cname=list.str(lcol,i)
+            fname=cname
+
+            if field.exist(params,"columns/"+cname+"/field")
+            {
+                fname=trim(field.str(params,"columns/"+cname+"/field"))
+                fname=ifstr(fname!="",fname,cname)
+            }
+
+            if uie.isSummaryCol(params,cname) && field.exist(row,fname)
+            {
+                do uie.updateSummaryCol(params,"summaries/max/"+cname,field.num(row,fname), "max")
+                do uie.updateSummaryCol(params,"summaries/min/"+cname,field.num(row,fname), "min")
+                do uie.updateSummaryCol(params,"summaries/sum/"+cname,field.num(row,fname), "sum")
+
+                params<"summaries/avg/"+cname>:uie.avg(field.dnum(params,"summaries/sum/"+cname,0),field.dnum(params,"summaries/count",0))
+
+                if key!=""
+                {
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/max/"+cname,field.num(row,fname), "max")
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/min/"+cname,field.num(row,fname), "min")
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/sum/"+cname,field.num(row,fname), "sum")
+
+                    params<"summaries/groups/"+key+"/avg/"+cname>:uie.avg(field.dnum(params,"summaries/groups/"+key+"/sum/"+cname,0),field.dnum(params,"summaries/groups/"+key+"/count",0))
+                }
+            }
+        }
+    }
+
+    #!
+    uie.updateSummaryCol::&target,field_target,value, op
+    {
+        if not(field.exist(target,field_target))
+        {
+            target<field_target>:value
+            return
+        }
+
+        switch tolower(trim(op))
+        {
+            case "sum"
+            {
+                target<field_target>:value+field.num(target,field_target)
+            }
+            case "max"
+            {
+                if value>field.num(target,field_target)
+                {
+                    target<field_target>:value
+                }
+            }
+            case "min"
+            {
+                if value<field.num(target,field_target)
+                {
+                    target<field_target>:value
+                }
+            }
+        }
+
+    }
+
+    #!
+    uie.isSummaryCol::&params,cname
+    {
+        if field.exist(params,"columns/"+cname+"/summary")
+        {
+            if isanyword(tolower(trim(field.str(params,"columns/"+cname+"/summary"))),"sum,max,min,avg,count")
+            {
+                return @true
+            }
+        }
+
+        return @false
+    }
+
+    uie.preparaSummaryGroup:: &params, text
+    {
+        key=md5(text)
+
+        if not(field.exist(params,"summaries/groups/"+key))
+        {
+            params<"summaries/groups/"+key+"*">:uie.new_record()
+            params<"summaries/groups/"+key+"/text">: text
+            params<"summaries/groups/"+key+"/count">: 0
+            params<"summaries/groups/"+key+"/sum*">: uie.new_record()
+            params<"summaries/groups/"+key+"/max*">: uie.new_record()
+            params<"summaries/groups/"+key+"/min*">: uie.new_record()
+            params<"summaries/groups/"+key+"/avg*">: uie.new_record()
+        }
+
+        return key
+    }
+
+
+    #!
+    uie.prepareColumns :: &params
+    {
+        ref t=field.obj(params,"datatable")
+
+        if not(field.exist(params,"columns")) && table.rows(t)>0
+        {
+            ref cnames=list.create_from_fields(row.get(t,0))
+
+            params<"columns*">:uie.new_record()
+
+            for i=0;i<list.count(cnames)
+            {
+                params<"columns/"+list.str(cnames,i)+"*">: uie.new_record()
+            }
+        }
+    }
+
+    #!
+    uie.iterator::&params
+    {
+
+        ref t=uie.prepareData(params)
+        ref array_data=list.create()
+
+        do uie.prepareColumns(params)
+
+        do uie.prepareSummaries(params)
+
+        group_value=""
+        in_group=@false
+        ref fhead=@null
+        ref fsummary=@null
+
+        if table.rows(t)>0
+        {
+            //Imprimir encabezado de tabla
+            if field.exist(params,"head")
+            {
+                ref fhead=field.obj(params,"head")
+            }           
+
+            if not(isnull(fhead))
+            {
+                that fhead(params,t)
+            }
+        }
+
+        for i=0;i<table.rows(t)
+        {
+            ref row:row.get(t,i)
+            
+            ref frow=@null
+            ref fhgroup=@null
+            ref ffgroup=@null
+            
+            do uie.updateSummary(params,row)
+
+            row<"_row_index">:i
+            if parse.bool(field.dstr(params,"build_array","0"))
+            {
+                do list.add(array_data,row)
+            }
+
+            if field.dstr(params,"group_by","")!=""
+            {
+                if group_value!=field.str(row,field.str(params,"group_by"))
+                {
+                    if in_group
+                    {
+                        row<"_end_group_value">:group_value
+
+                        //Pie de grupo
+                        if field.exist(params,"summary_group")
+                        {
+                            ref ffgroup=field.obj(params,"summary_group")
+                        }           
+
+                        if not(isnull(ffgroup))
+                        {
+                            that ffgroup(params,row)
+                        }
+                        in_group=@false
+                    }
+
+                    //Encabezado de grupo
+                    if field.exist(params,"begin_group")
+                    {
+                        ref fhgroup=field.obj(params,"begin_group")
+                    }           
+
+                    if not(isnull(fhgroup))
+                    {
+                        that fhgroup(params,row)
+                    }
+                    group_value=field.str(row,field.str(params,"group_by"))
+                    in_group=@true
+                }
+            }
+            
+            if field.exist(params,"each_row")
+            {
+                ref frow=field.obj(params,"each_row")
+            }           
+
+            if not(isnull(frow))
+            {
+                that frow(params,row)
+            }
+
+            
+        }  
+
+        if parse.bool(field.dstr(params,"build_array","0"))
+        {
+            params<"array_data*">:array_data
+        }
+
+        if field.dstr(params,"group_by","")!="" && in_group
+        {
+            row<"_end_group_value">:group_value
+            
+            if field.exist(params,"summary_group")
+            {
+                ref ffgroup=field.obj(params,"summary_group")
+            }           
+
+            if not(isnull(ffgroup))
+            {
+                that ffgroup(params,row)
+            }
+        }
+
+        if table.rows(t)>0
+        {
+            //Imprimir pie de tabla
+            if field.exist(params,"summary")
+            {
+                ref fsummary=field.obj(params,"summary")
+            }           
+
+            if not(isnull(fsummary))
+            {
+                that fsummary(params,t)
+            }
+        }
+    }
+
+    htmlAttributesFromRec::&rec
+    {
+        //Devuelve una cadena que puede ser inyectada como secuencia de atributos válidos en html
+
+        if isnull(rec)
+        {
+            return "uielement"
+        }
+
+        ref l=list.create_from_fields(rec)
+        attributes=""
+
+        for i=0;i<list.count(l)
+        {
+            attributes=attributes+list.str(l,i)+' = "'+field.dstr(rec,list.str(l,i),"")+'" '
+        }
+
+        attributes=attributes+"uielement"
+
+        return attributes
+    }
+}

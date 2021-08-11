@@ -1,0 +1,48 @@
+#!
+
+module "cookies"
+{
+    new @cookies { }
+
+    cookie.set:: name, value
+    {
+        do cookie.setw(name,value+";Path=/;Max-Age=31104000")
+    }
+
+    cookie.setw :: name, value
+    {
+        @cookies<name>:value
+
+        if not(field.exist(@http_context,"response/cookies"))
+        {
+            @http_context<"response/cookies*">:@cookies
+        }
+
+        @http_context<"response/cookies/"+name>:value
+    }
+
+    cookie.get :: name
+    {
+        return cookie.dget(name,"")
+    }
+
+    cookie.dget :: name,def_val
+    {
+        data=def_val
+        
+        if (field.exist(@cookies,name))
+        {
+            data:@cookies<name>
+        }
+        else 
+        {
+            if field.exist(@http_context,"request/cookies/"+name)
+            {
+                data:@http_context<"request/cookies/"+name>
+                @cookies<name>: data
+            }
+        }
+		
+        return data
+    }
+}

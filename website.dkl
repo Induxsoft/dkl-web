@@ -1,0 +1,121 @@
+#include "dkli.dkh"
+#!
+module "website"
+{
+
+    @TEMPLATE_MAX_DEEP=5
+    @TEMPLATE_FILENAME="template"
+    @DKL_TEMPLATE_PREFIX="<!DOCTYPE html>\r\n"
+    ref @TEMPLATE_EXTENSIONS=from.json('[{"ext":"dkt","dkl":true},{"ext":"htt","dkl":false}]')
+    ref @TEMPLATE_CURRENT=@null
+
+    if not(isset("@SITE_INCLUDES"))
+    {
+        @SITE_INCLUDES="config.dk,lib.dk"
+    }
+
+    include_list::
+    {
+        ref l=list.create()
+
+        for i=0;i<list.count(@SITE_STRUCT)
+        {
+            ref fl=split(@SITE_INCLUDES,",")
+            for j=0;j<list.count(fl)
+            {
+                if file.exists(path.concat(list.str(@SITE_STRUCT,i),list.str(fl,j)))
+                {
+                    do list.add(l,path.concat(list.str(@SITE_STRUCT,i),list.str(fl,j)))
+                }
+            }
+        }
+        //exception{}
+
+        return l
+    }
+
+    selectTemplate::path
+    {
+        repeat @TEMPLATE_MAX_DEEP
+        {
+            ref t=findTemplate(path)
+            if not(isnull(t))
+            {
+                return t
+            }
+
+            path=dir.name(path)
+            exception{return @null}
+        }
+
+        return @null
+    }
+    
+    findTemplate:: path
+    {
+        for i=0;i<list.count(@TEMPLATE_EXTENSIONS)
+        {
+            ref ext=list.obj(@TEMPLATE_EXTENSIONS, i)
+
+            if file.exists(path.concat(path,@TEMPLATE_FILENAME+"."+field.str(ext,'ext')))
+            {
+                new temp
+                {
+                    @"filename":path.concat(path,@TEMPLATE_FILENAME+"."+field.str(ext,'ext'))
+                    @"dkl":field.num(ext,'dkl')
+                }
+                return temp
+            }
+        }
+
+        return @null
+    }
+
+    render::id
+    {
+        return fxml(eval(ifstr(contains(id,'('),id,id+"()")) )
+    }
+
+    render_page::
+    {
+        xml=""
+        ref @TEMPLATE_CURRENT=selectTemplate(dir.name(field.dstr(@http_context,'request/headers/PATH_TRANSLATED','')))
+
+        if isnull(@TEMPLATE_CURRENT)
+        {
+            do rise_error(0,"No hay una plantilla disponible")
+        }
+        
+        if field.num(@TEMPLATE_CURRENT,"dkl")
+        {
+            include field.str(@TEMPLATE_CURRENT,"filename")
+            xml=@DKL_TEMPLATE_PREFIX+fxml()
+        }
+        else
+        {
+            do fxml()
+            xml=ftext(file.rtext(field.str(@TEMPLATE_CURRENT,"filename"))) 
+        }
+
+        @http_context<"response/output">:"text"
+        @http_context<"response/text">:xml
+    }
+
+    ref @SITE_STRUCT=dir.struct(field.dstr(@http_context,'request/headers/PATH_TRANSLATED',''))
+    ref @INCLUDE_LIST=include_list()
+
+    if not(isset("@WEB_SITE_LOADED_FILES"))
+    {
+        new @WEB_SITE_LOADED_FILES{}
+    }
+
+    for i=0;i<list.count(@INCLUDE_LIST)
+    {
+        if not(field.exist(@WEB_SITE_LOADED_FILES,list.str(@INCLUDE_LIST,i)))
+        {
+            include list.str(@INCLUDE_LIST,i)
+            @WEB_SITE_LOADED_FILES<list.str(@INCLUDE_LIST,i)>:"loaded"
+        }
+    }
+
+}

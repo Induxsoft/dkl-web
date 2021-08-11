@@ -1,0 +1,541 @@
+#include "dkli.dkh"
+
+#!
+module "UIElements.dbTable"
+{
+    #!
+    uie.dbTableHead::&params,&table
+    {
+        ref cnames=list.create_from_fields(field.obj(params,"columns"))
+
+        new row
+        {
+            @"_row_type":"header"
+        }
+
+        if field.exist(params,"rows_attributes")
+        {
+            row<"_row_attributes*">: field.dobj(params,"rows_attributes/header",@null)
+        }
+
+        if field.exist(params,"before_row")
+        {
+            ref fc=field.obj(params,"before_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+
+        if parse.bool(field.dstr(row,"_abort","0"))
+        {
+            return
+        }
+
+        ##
+        "#<field.dstr(params,'element_thead','thead')>"
+        {
+            "#<field.dstr(row,'_row_element','tr')>"('#<htmlAttributesFromRec(field.dobj(row,"_row_attributes",@null))>'="row_header")
+            {
+                ##
+                for i=0;i<list.count(cnames)
+                {
+                    if field.exist(params,'columns/'+list.str(cnames,i)+'/caption')
+                    {
+                        caption=field.str(params,'columns/'+list.str(cnames,i)+'/caption')
+                    }
+                    else
+                    {
+                        caption=list.str(cnames,i)
+                    }
+                    
+                    new cell
+                    {
+                        @"text": caption
+                        @"field": ""
+                        @"column":list.str(cnames,i)
+                        @"cell_type":"header"
+                        @"element":"th"
+                    }
+
+                    do uie.dbTableCell(params,row,cell)
+                }
+                ##
+            }
+        }
+        ##
+
+        if field.exist(params,"after_row")
+        {
+            ref fc=field.obj(params,"after_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+    }
+
+    #!
+    uie.dbTableCell::&params,&row, &cell
+    {
+        if field.exist(params,"before_cell")
+        {
+            ref fc=field.obj(params,"before_cell")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row,cell)
+            }
+        }
+
+        if parse.bool(field.dstr(cell,"_abort","0"))
+        {
+            return
+        }
+
+        ref cel_attr=field.dobj(cell,"attributes",@null)
+
+        if isnull(cel_attr)
+        {
+            ref cel_attr=field.dobj(params,"columns/"+field.str(cell,"column")+"/attributes",@null)
+            exception{}
+        }
+
+        ##
+        "#<field.dstr(cell,'element','td')>"('#<htmlAttributesFromRec(cel_attr)>'="cell")
+        {
+            $"#<field.dstr(cell,'text','')>"
+        }
+        ##
+
+        if field.exist(params,"after_cell")
+        {
+            ref fc=field.obj(params,"after_cell")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row,cell)
+            }
+        }
+    }
+
+    #!
+    uie.dbTableSummary::&params,&table
+    {
+        ref cnames=list.create_from_fields(field.obj(params,"columns"))
+        new row
+        {
+            @"_row_type":"summary"
+        }
+
+        if field.exist(params,"rows_attributes")
+        {
+            row<"_row_attributes*">: field.dobj(params,"rows_attributes/summary",@null)
+        }        
+
+        if field.exist(params,"before_row")
+        {
+            ref fc=field.obj(params,"before_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+
+        if parse.bool(field.dstr(row,"_abort","0"))
+        {
+            return
+        }
+
+        if not(uie.dbTableHasSummaries(params)) || not(parse.bool(field.dstr(params,"show_summary","1")))
+        {
+            return 
+        }
+
+        ##
+        
+        "#<field.dstr(row,'_row_element','tr')>"('#<htmlAttributesFromRec(field.dobj(row,"_row_attributes",@null))>'="row_summary")
+        {
+            ##
+            for i=0;i<list.count(cnames)
+            {
+                if field.exist(params,'columns/'+list.str(cnames,i)+'/summary')
+                {
+                    if isanyword(tolower(field.str(params,'columns/'+list.str(cnames,i)+'/summary')),"sum,avg,max,min")
+                    {
+                        text=format(field.dnum(params,"summaries/" + field.str(params,'columns/'+list.str(cnames,i)+'/summary')+"/"+list.str(cnames,i),0),field.dstr(params,'columns/'+list.str(cnames,i)+'/format',''))
+                    }
+                    else if tolower(field.str(params,'columns/'+list.str(cnames,i)+'/summary'))=="count"
+                    {
+                        text=field.dstr(params,"summaries/count","0")
+                    }
+                    else
+                    {
+                        text=field.str(params,'columns/'+list.str(cnames,i)+'/summary')
+                    }
+                }
+                else
+                {
+                    text=""
+                }
+                
+                new cell
+                {
+                    @"text": text
+                    @"field": ""
+                    @"column":list.str(cnames,i)
+                    @"cell_type":"summary"
+                    @"element":"td"
+                }
+
+                do uie.dbTableCell(params,row,cell)
+            }
+            ##
+        }
+        ##
+
+        if field.exist(params,"after_row")
+        {
+            ref fc=field.obj(params,"after_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+    }
+
+    #!
+    uie.dbTableRow::&params,&row
+    {
+        row<"_row_type">:"detail"
+        
+        ref cnames=list.create_from_fields(field.obj(params,"columns"))
+        value=""
+
+        if field.dstr(params,"value_field","")!=""
+        {
+            value=field.str(row, field.str(params,"value_field"))
+        }
+
+        ref att_row=field.dobj(row,"_row_attributes",@null)
+
+        if not(isnull(att_row))
+        {
+            if list.count(list.create_from_fields(att_row))<1
+            {
+                ref att_row=@null
+            }
+        }
+
+        if isnull(att_row)
+        {
+            if field.exist(params,"rows_attributes")
+            {
+                ref att_row= field.dobj(params,"rows_attributes/detail",@null)
+            }
+        } 
+
+        if field.exist(params,"before_row")
+        {
+            ref fc=field.obj(params,"before_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+
+        if parse.bool(field.dstr(row,"_abort","0"))
+        {
+            return
+        }
+
+        ##
+        "#<field.dstr(row,'_row_element','tr')>"("#<ifstr(value!='','data','')>"="#<value>" "row-index"="#<field.str(row,'_row_index')>" '#<htmlAttributesFromRec(att_row)>'="row")
+        {
+            ##
+            for i=0;i<list.count(cnames)
+            {
+                if field.exist(params,'columns/'+list.str(cnames,i)+'/field')
+                {
+                    fname=field.str(params,'columns/'+list.str(cnames,i)+'/field')
+                }
+                else
+                {
+                    fname=list.str(cnames,i)
+                }
+                if field.exist(row,fname)
+                {
+                    
+                    new cell
+                    {
+                        @"text": field.str(row,fname)
+                        @"field": fname
+                        @"column":list.str(cnames,i)
+                        @"cell_type":"data"
+                    }
+
+                    if field.exist(params,'columns/'+list.str(cnames,i)+'/format')
+                    {
+                        fmt=field.dstr(params,'columns/'+list.str(cnames,i)+'/format',"")
+
+                        if trim(fmt)!=""
+                        {
+                            if contains(fmt,"/") || contains(fmt,":")
+                            {
+                                //Es un formato de fecha u hora
+                                cell<"text">:date_str(field.obj(row,fname),fmt)
+                            }
+                            else
+                            {
+                                //Es un formato numérico
+                                cell<"text">:format(field.num(row,fname),fmt)
+                            }
+                        }
+                    }
+
+                    do uie.dbTableCell(params,row,cell)
+                }
+                else
+                {
+                    new cell
+                    {
+                        @"text": ""
+                        @"field": fname
+                        @"cell_type":"unknow"
+                        @"column":list.str(cnames,i)
+                    }
+                    
+                    do uie.dbTableCell(params,row,cell)
+                }
+                ##
+            }
+            ##
+        }
+        #!
+
+        if field.exist(params,"after_row")
+        {
+            ref fc=field.obj(params,"after_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+        
+    }
+
+    #!
+    uie.dbTableBeginGroup::&params,&row
+    {
+        row<"_row_type">:"header_group"
+
+        ref attr=@null
+
+        if field.exist(params,"rows_attributes")
+        {
+            ref attr= field.dobj(params,"rows_attributes/begin_group",@null)
+        }
+
+        if field.exist(params,"before_row")
+        {
+            ref fc=field.obj(params,"before_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+
+        if parse.bool(field.dstr(row,"_abort","0"))
+        {
+            return
+        }
+
+        ##
+        "#<field.dstr(row,'_row_element','tr')>"('#<htmlAttributesFromRec(attr)>'="row_begin_group")
+        {
+            ##
+            new cell
+            {
+                @"text": field.str(row,field.str(params,'group_by'))
+                @"field": field.str(params,'group_by')
+                @"column":field.str(params,'group_by')
+                @"cell_type":"header_group"
+            }
+
+            do uie.dbTableCell(params,row,cell)
+            ##
+        }   
+        ##
+        if field.exist(params,"after_row")
+        {
+            ref fc=field.obj(params,"after_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+    }
+
+    #!
+    uie.dbTableHasSummaries::&params
+    {
+        ref lcol=list.create_from_fields(field.obj(params,"columns"))
+
+        for i=0;i<list.count(lcol)
+        {
+            cname=list.str(lcol,i)
+
+            if field.exist(params,"columns/"+cname+"/summary")
+            {
+                if isanyword(tolower(trim(field.str(params,"columns/"+cname+"/summary"))),"sum,max,min,avg,count")
+                {
+                    return @true
+                }
+            }
+        }
+
+        exception { }
+
+        return @false
+    }
+
+    #!
+    uie.dbTableSummaryGroup::&params,&row
+    {
+        ref cnames=list.create_from_fields(field.obj(params,"columns"))
+        row<"_row_type">:"summary_group"
+
+        if field.exist(params,"rows_attributes")
+        {
+            row<"_row_attributes*">: field.dobj(params,"rows_attributes/summary_group",@null)
+        }
+
+        if field.exist(params,"before_row")
+        {
+            ref fc=field.obj(params,"before_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+
+        if parse.bool(field.dstr(row,"_abort","0"))
+        {
+            return
+        }
+
+        if trim(field.dstr(params,"group_by",""))=="" || not(uie.dbTableHasSummaries(params)) ||  not(parse.bool(field.dstr(params,"show_summary_group","1")))
+        {
+            return 
+        }
+
+
+        //key=uie.preparaSummaryGroup(params, field.str(row,field.str(params,"group_by")))
+        key=uie.preparaSummaryGroup(params, field.dstr(row,"_end_group_value",""))
+        
+        
+        ##
+
+        "#<field.dstr(row,'_row_element','tr')>"('#<htmlAttributesFromRec(field.dobj(row,"_row_attributes",@null))>'="row_summary")
+        {
+            ##
+            for i=0;i<list.count(cnames)
+            {
+                if field.exist(params,'columns/'+list.str(cnames,i)+'/summary')
+                {
+                    if isanyword(tolower(field.str(params,'columns/'+list.str(cnames,i)+'/summary')),"sum,avg,max,min")
+                    {
+                        text=format(field.dnum(params,"summaries/groups/"+key+"/"+field.str(params,'columns/'+list.str(cnames,i)+'/summary')+"/"+list.str(cnames,i),0),field.dstr(params,'columns/'+list.str(cnames,i)+'/format',''))
+                    }
+                    else if tolower(field.str(params,'columns/'+list.str(cnames,i)+'/summary'))=="count"
+                    {
+                        text=field.dstr(params,"summaries/groups/"+key+"/count","0")
+                    }
+                    else
+                    {
+                        text=""
+                    }
+                }
+                else
+                {
+                    text=""
+                }
+                
+                new cell
+                {
+                    @"text": text
+                    @"field": ""
+                    @"column":list.str(cnames,i)
+                    @"cell_type":"summary_group"
+                    @"element":"td"
+                }
+
+                do uie.dbTableCell(params,row,cell)
+            }
+            ##
+        }
+        ##
+
+        if field.exist(params,"after_row")
+        {
+            ref fc=field.obj(params,"after_row")
+
+            if not(isnull(fc))
+            {
+                that fc(params,row)
+            }
+        }
+    }
+
+    #!
+    uie.dbTable::&params
+    {
+        if not(field.exist(params,"head"))
+        {
+            point f to uie.dbTableHead
+            params<"head*">:f
+        }
+
+        if not(field.exist(params,"summary"))
+        {
+            point f to uie.dbTableSummary
+            params<"summary*">:f
+        }
+
+        if not(field.exist(params,"each_row"))
+        {
+            point f to uie.dbTableRow
+            params<"each_row*">:f
+        }
+
+        if not(field.exist(params,"begin_group"))
+        {
+            point f to uie.dbTableBeginGroup
+            params<"begin_group*">:f
+        }
+
+        if not(field.exist(params,"summary_group"))
+        {
+            point f to uie.dbTableSummaryGroup
+            params<"summary_group*">:f
+        }
+
+        ##
+        "#<field.dstr(params,'element','table')>"(id="#<field.dstr(params,'id','dbTable_'+uuid())>" '#<htmlAttributesFromRec(field.dobj(params,"attributes",@null))>'="dbtable")
+        {
+            ##
+            do uie.iterator(params)
+            ##
+        }
+        ##
+    }
+}
