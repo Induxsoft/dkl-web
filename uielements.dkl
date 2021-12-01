@@ -45,9 +45,9 @@ module "UIElements"
                 ##
             }
 
-            for i=0;i<table.rows(t)
+            for i=0;i<@count(t)
             {
-                ref row:row.get(t,i)
+                ref row:@item(t,i)
                 ##
                 option(value="#<field.str(row, field.str(params,'value_field'))>" "#<ifstr(field.str(row, field.str(params,'value_field'))==field.dstr(params,'selected','') ,'selected','')>"="true"){$"#<field.str(row, field.str(params,'text_field'))>"}
                 ##
@@ -201,9 +201,9 @@ module "UIElements"
     {
         ref t=field.obj(params,"datatable")
 
-        if not(field.exist(params,"columns")) && table.rows(t)>0
+        if not(field.exist(params,"columns")) && @count(t)>0
         {
-            ref cnames=list.create_from_fields(row.get(t,0))
+            ref cnames=list.create_from_fields(@item(t,0))
 
             params<"columns*">:uie.new_record()
 
@@ -230,7 +230,7 @@ module "UIElements"
         ref fhead=@null
         ref fsummary=@null
 
-        if table.rows(t)>0
+        if @count(t)>0
         {
             //Imprimir encabezado de tabla
             if field.exist(params,"head")
@@ -244,9 +244,9 @@ module "UIElements"
             }
         }
 
-        for i=0;i<table.rows(t)
+        for i=0;i<@count(t)
         {
-            ref row:row.get(t,i)
+            ref row:@item(t,i)
             
             ref frow=@null
             ref fhgroup=@null
@@ -329,7 +329,7 @@ module "UIElements"
             }
         }
 
-        if table.rows(t)>0
+        if @count(t)>0
         {
             //Imprimir pie de tabla
             if field.exist(params,"summary")
