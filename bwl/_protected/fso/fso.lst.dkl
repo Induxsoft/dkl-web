@@ -1,0 +1,44 @@
+﻿#include "dkli.dkh"
+program "Devkron File System Operations (Dkl FSO) [List command]"
+{
+	#!
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+    #include "webauth.dkl"
+    #include "fso.config.dk"
+    #include "fso.dk"
+
+    new p 
+    { 
+        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
+        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+
+        @"filter"   : field.dstr(@http_context,"request/get/filter","*.*")
+        @"search"   : field.dstr(@http_context,"request/get/search","")
+        @"deep"     : field.dnum(@http_context,"request/get/deep",999)
+        @"mode"     : field.dnum(@http_context,"request/get/mode",0) // 0-directorios y archivos, 1-solo directorios, 2-solo archivos, 3-solo resultados de búsqueda de archivos
+    }
+
+    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+
+    new res { @"success": @true }
+    ref d=dklfso.list(p)
+
+    if @@(p,"mode")==3 { res<"data*">: @@(p,"&found") }
+    else { res<"data*">: d }
+    
+    exception
+    {
+        res<"message">:last_error()
+        res<"success">:@false
+    }
+
+
+    @http_context<"response/headers/Content-Type">:"application/json;charset=utf-8"
+    @http_context<"response/output">:"text"
+    @http_context<"response/text">: to.json( res )
+}

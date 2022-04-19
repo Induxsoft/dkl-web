@@ -1,0 +1,47 @@
+#include "dkli.dkh"
+#!
+program
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "webcl.dkh"
+	#include "webauth.dkl"
+	#include "fso/fso.config.dk"
+	#include "fso/fso.dk"
+	
+	@auth.idp=path.concat(@dklfso_protected_dir,"idp/default.dk")
+
+	ref @http_context=@@(@http_request,"&http_context")
+	base_path=field.dstr(@http_request,"base_path","")
+	@http_context<"session*">:record.create()
+
+	include path.concat(base_path,@auth.idp)
+
+	//Recuperar manifiesto de privilegios del recurso solicitado
+	
+	uri=list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0)
+
+	ref res_info=dklfso.createObjectInfo(base_path,uri)
+	
+	if isnull(res_info) { return } // Abortar si no se puede recuperar información del recurso 
+	
+	if field.typeof(res_info,"privileges")!=3 { return } // Abortar si no hay manifiesto de privilegios
+	
+	@http_context<"session/resource*">:res_info
+
+	ref privs=auth.checkPrivs(@@(@http_context,"&session/user"), @@(res_info,"&privileges"))
+	@http_context<"session/resource/authforuser*">:privs
+	
+	if field.typeof(res_info,"privileges/"+@privid_read)!=3 { return } //Abortar si no está establecido explícitamente el privilegio de lectura
+
+	ref read_privs=@@(res_info,"&privileges/"+@privid_read)
+	if isnull(read_privs) { return }
+
+	if isnull(@@(@http_context,"&session/user")) { do rise_error(0,"Debe iniciar sesión")}
+
+	//Verificar el permiso de lectura
+	
+	if not(auth.findStrInList(privs, @privid_read))	{ do rise_error(0,"No autorizado") }
+	
+
+}

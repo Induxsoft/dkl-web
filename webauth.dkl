@@ -1,0 +1,214 @@
+﻿#include "dkli.dkh"
+#!
+module "authorization"
+{
+    using @http_token_locations
+    {
+        @"get":"ids,token"
+        @"cookie":"__induxsoft_token"
+        @"form":"session_id"
+        @"json":""
+        @"bearer":@true
+        @"header":""
+        @"custom_auth":@true
+    }
+
+    //Encuentra el token de sesión
+    auth.token::
+    {
+        ref opts=list.create_from_fields(@http_token_locations)
+
+        for i=0;i<@count(opts)
+        {
+            value=field.dstr(@http_token_locations,list.str(opts,i),"")
+            switch tolower(list.str(opts,i))
+            {
+                case "get"
+                {
+                    if trim(value)!=""
+                    {
+                        ref keys=split(value,",")
+                        for j=0;j<@count(keys)
+                        {
+                            if trim(@@(@http_context,"request/get/"+list.str(keys,j))) !="" { return trim(@@(@http_context,"request/get/"+list.str(keys,j))) }
+                        }
+                    }
+                }
+                case "cookie"
+                {
+                    if trim(value)!=""
+                    {
+                        ref keys=split(value,",")
+                        for j=0;j<@count(keys)
+                        {
+                            if trim(cookie.get(list.str(keys,j)))!="" { return trim(cookie.get(list.str(keys,j))) }
+                        }
+                    }
+                }
+                case "form"
+                {
+                    if trim(value)!=""
+                    {
+                        ref keys=split(value,",")
+                        for j=0;j<@count(keys)
+                        {
+                            if trim(@@(@http_context,"request/post/"+list.str(keys,j))) !="" { return trim(@@(@http_context,"request/post/"+list.str(keys,j))) }
+                        }
+                    }
+                }
+                case "json"
+                {
+                    if trim(value)!="" && @@(@http_context,"request/post_string")!=""
+                    {
+                        ref obj=from.json(@@(@http_context,"request/post_string"))
+
+                        ref keys=split(value,",")
+                        for j=0;j<@count(keys)
+                        {
+                            if trim(@@(obj,list.str(keys,j))) !="" { return trim(obj,list.str(keys,j))) }
+                        }
+                        exception{}
+                    }
+                }
+                case "bearer"
+                {
+                    
+                    if parse.bool(value)
+                    {
+                        ba=trim(replace(field.dstr(@http_context,"request/headers/HTTP_AUTHORIZATION",field.dstr(@http_context,"request/headers/Authorization","")),"\t"," "))
+                        
+                        if ba!=""
+                        {
+                            ref keys=split(ba," ")
+                            if @count(keys)==2
+                            {
+                                if tolower(list.str(keys,0))=="bearer"
+                                {
+                                    return list.str(keys,1) 
+                                }
+                            }
+                        }
+                    }
+                    exception{}
+                }
+                case "custom_auth"
+                {
+                    if parse.bool(value)
+                    {
+                        ba=trim(replace(field.dstr(@http_context,"request/headers/HTTP_AUTHORIZATION",field.dstr(@http_context,"request/headers/Authorization","")),"\t"," "))
+                        
+                        if ba!="" { return ba }
+                    }
+                }
+                case "header"
+                {
+                    if trim(value)!=""
+                    {
+                        ref keys=split(value,",")
+                        for j=0;j<@count(keys)
+                        {
+                            ba=trim(field.dstr(@http_context,"request/headers/http_"+list.str(keys,j),field.dstr(@http_context,"request/headers/"+list.str(keys,j),"")))
+                            if ba !="" { return ba }
+                        }
+                    }
+                }
+            }
+        }
+
+        exception{}
+        return ""
+    }
+
+    auth.checkPrivs::&login, &test
+    {
+        ref privs=list.create()
+        
+        ref test_privs=list.create_from_fields(test)
+
+        for i=0;i<@count(test_privs)
+        {
+            ref l=field.obj(test,list.str(test_privs,i))
+            for y=0;y<@count(l)
+            {
+                ref pv=@item(l,y)
+                ref lk=list.create_from_fields(pv)
+                if @count(lk)>0
+                {
+                    value=@@(pv,list.str(lk,0))
+                    
+                    switch tolower(list.str(lk,0))
+                    {
+                        case "user"
+                        {
+                            if @@(login,"uid")==value 
+                            {
+                                 do list.add(privs,list.str(test_privs,i))
+                                 value=""
+                            }
+                        }
+                        case "workspace"
+                        {
+                            
+                            if auth.findStrInList(@@(login,"&memberships/workspaces"),value)
+                            {
+                                do list.add(privs,list.str(test_privs,i))
+                                value=""
+                            }
+                        }
+                        case "team"
+                        {
+                            if auth.findStrInList(@@(login,"&memberships/teams"),value)
+                            {
+                                do list.add(privs,list.str(test_privs,i))
+                                value=""
+                            }
+                        }
+                        case "role"
+                        {
+                            if auth.findStrInList(@@(login,"&memberships/roles"),value)
+                            {
+                                do list.add(privs,list.str(test_privs,i))
+                                value=""
+                            }
+                        }
+                        default
+                        {
+                            if field.exist(login,list.str(lk,0))
+                            {
+                                if @@(login,list.str(lk,0))==value 
+                                {
+                                    do list.add(privs,list.str(test_privs,i))
+                                    value=""
+                                }
+                            }
+                            else if field.exist(params,list.str(lk,0))
+                            {
+                                if @@(params,list.str(lk,0))==value 
+                                {
+                                    do list.add(privs,list.str(test_privs,i))
+                                    value=""
+                                }
+                            }
+                        }
+                    }
+                    if value=="" { break }
+                }
+            }
+        }
+
+        return privs
+    }
+	
+	auth.findStrInList::&lista, valor
+    {
+        if isnull(lista){ return @false }
+        if trim(valor)=="" { return @false }
+
+        for i=0;i<@count(lista)
+        {
+            if list.str(lista,i)==valor { return @true }
+        }
+
+        return @false
+    }
+}

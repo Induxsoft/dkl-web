@@ -1,0 +1,124 @@
+﻿#include "dkli.dkh"
+#!
+module "Devkron File System Operations (Dkl FSO) [Configuration]"
+{
+    @dklfso_websites_path="web" // Carpeta predeterminada para sitios Web
+    @dklfso_multisites=@true    // Si es @true permite acceder al sistema de archivos de todos los sitios en la instancia
+
+    @dklfso_metadata_ext="._m_" // Extensión para archivos de metadatos
+    @dklfso_privs_ext="._p_"    // Extensión para archivos de privilegios
+
+    @dklfso_danger_files_ext=".dkl,.dkh" //Extensiones de archivos peligrosas (requieren permiso especial)
+
+    @dklfso_protected_dir="_protected"  // Carpeta protegida de los sitios Web
+    @dklfso_protected_dir_restricted=@false //Si es @true, se restringe el acceso a la carpeta protegida
+    @dklfso_textfile_maxsize_r4search=262144 //Tamaño máximo en bytes del archivo para buscar en contenido
+
+    @dklfso_privs_revdeep=50    //Máximo de subniveles para buscar archivos de permisos heredados
+
+    ref @dklfso.funcAuthObject=@null    // Puntero a la función para realizar la autorización f(objeto, privilegio)
+    ref @dklfso.funcSearchInFile=@null  // Puntero a la función para realizar la búsqueda de texto f(texto, archivo_local)
+
+    //Operaciones
+    @op_id_dkl_fso_list        ="dkl_fso_list"
+    @op_id_dkl_fso_getprops    ="dkl_fso_getprops"
+    @op_id_dkl_fso_setprops    ="dkl_fso_setprops"
+    @op_id_dkl_fso_getprivs    ="dkl_fso_getprivs"
+    @op_id_dkl_fso_setprivs    ="dkl_fso_setprivs"
+    @op_id_dkl_fso_lock        ="dkl_fso_lock"
+    @op_id_dkl_fso_rename      ="dkl_fso_rename"
+    @op_id_dkl_fso_copy        ="dkl_fso_copy"
+    @op_id_dkl_fso_move        ="dkl_fso_move"
+    @op_id_dkl_fso_delete      ="dkl_fso_delete"
+    @op_id_dkl_fso_recover     ="dkl_fso_recover"
+    @op_id_dkl_fso_mkdir       ="dkl_fso_mkdir"
+    @op_id_dkl_fso_upload      ="dkl_fso_upload"
+    @op_id_dkl_fso_overwrite   ="dkl_fso_overwrite"
+    @op_id_dkl_fso_danger      ="dkl_fso_danger"
+
+    //Permisos predeterminados
+    @privid_admin               ="admin"
+    @privid_write               ="write"
+    @privid_read                ="read"
+    @privid_plus                ="plus"
+
+    dklfso.authOp::op, &privs
+    {
+        if auth.findStrInList(privs, op) { return @true } 
+        if auth.findStrInList(privs,@privid_admin) { return @true }
+
+        //Mapa de resolución de privilegios
+        switch op
+        {
+            case @op_id_dkl_fso_list
+            {
+                return auth.findStrInList(privs,@privid_write) || ( auth.findStrInList(privs,@privid_read) && auth.findStrInList(privs,@privid_plus) )
+            }
+            case @op_id_dkl_fso_getprops
+            {
+                return auth.findStrInList(privs,@privid_write) || ( auth.findStrInList(privs,@privid_read) && auth.findStrInList(privs,@privid_plus) )
+            }
+            case @op_id_dkl_fso_setprops
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_getprivs
+            {
+                return auth.findStrInList(privs,@privid_write) || ( auth.findStrInList(privs,@privid_read) && auth.findStrInList(privs,@privid_plus) )
+            }
+            case @op_id_dkl_fso_setprivs
+            {
+                return ( auth.findStrInList(privs,@privid_write) && auth.findStrInList(privs,@privid_plus) )
+            }
+            case @op_id_dkl_fso_lock
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_rename
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+
+            case @op_id_dkl_fso_rename
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_copy
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_move
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_delete
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_recover
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_mkdir
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_upload
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+            case @op_id_dkl_fso_overwrite
+            {
+                return auth.findStrInList(privs,@privid_write)
+            }
+
+            case @op_id_dkl_fso_danger
+            {
+                return ( auth.findStrInList(privs,@privid_write) && auth.findStrInList(privs,@privid_plus) )
+            }
+
+        }
+
+        return @false
+    }
+}

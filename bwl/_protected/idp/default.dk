@@ -1,0 +1,29 @@
+﻿#include "dkli.dkh"
+#!
+module "Proveedor de Identidades [Id Provider] de Induxsoft"
+{
+	#include "cookies.dkl"
+	
+	//Recuperar sesión del usuario
+	token=auth.token()
+
+	if token!=""
+	{
+    // API de autenticación de Induxsoft
+		new h { @"Content-Type":"application/json" }
+		new srq
+		{
+			@"ids":token
+			@"memberships":@true
+		}
+		ref lgres=from.json(http.request("https://api.induxsoft.net/auth/login/","POST",h,to.json(srq)))
+		if @@(lgres,"#success") 
+		{
+			 @http_context<"session/user*">: @@(lgres,"&data") 
+			 do cookie.set("__induxsoft_token",token)
+		}
+		else { do cookie.set("__induxsoft_token","") }
+		exception { }
+		//////////////////////////////////////////////////////////////////////////////////////////////
+	}
+}

@@ -1,0 +1,54 @@
+﻿#include "dkli.dkh"
+program "Devkron File System Operations (Dkl FSO) [Get Properties command]"
+{
+	#!
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+    #include "webauth.dkl"
+    #include "fso.config.dk"
+    #include "fso.dk"
+
+    new p 
+    { 
+        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
+        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+    }
+
+    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+    if field.exist(@http_context,"request/get/file") { p<"uri">:path.concat(@@(p,"uri"),@@(@http_context,"request/get/file")) }
+
+    new res { @"success": @true }
+    ref obj=dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri"))
+
+    if not(isnull(obj))
+    {
+        
+        if not(dklfso.isprotected(@@(obj,"fullpath")))
+        {
+            if dklfso.auth(obj,@op_id_dkl_fso_getprops) 
+            {
+                if not(dklfso.auth(obj,@op_id_dkl_fso_getprivs))
+                { if field.exist(obj,"privileges"){ do field.remove(obj,"privileges") }}
+            } 
+            else { ref obj=@null }
+        }
+        else { ref obj=@null }
+    }
+
+    res<"data*">: obj
+
+    exception
+    {
+        res<"message">:last_error()
+        res<"success">:@false
+    }
+
+
+    @http_context<"response/headers/Content-Type">:"application/json;charset=utf-8"
+    @http_context<"response/output">:"text"
+    @http_context<"response/text">: to.json( res )
+}

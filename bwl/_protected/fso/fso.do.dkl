@@ -1,0 +1,144 @@
+﻿#include "dkli.dkh"
+program "Devkron File System Operations (Dkl FSO) [Do command]"
+{
+	#!
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+    #include "webauth.dkl"
+    #include "fso.config.dk"
+    #include "fso.dk"
+
+    dklfso.copyFile::&p, &obj, &post_data, &uris, i
+    {
+        if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented")}
+        else 
+        { 
+            ref dest_folder=dklfso.createObjectInfo(@@(p,"base_path"),@@(post_data,list.str(uris,i)+"/to"))
+            if isnull(dest_folder)
+            {
+                ppath=path.concat(@@(p,"base_path"),@@(post_data,list.str(uris,i)+"/to"))
+                ref privs=dklfso.getPrivs(ppath,@true )
+                if isnull(privs) { do rise_error(0, "No existe el folder indicado y no hay manifiesto de privilegios disponible") }
+
+                ref dest_folder=record.create()
+                using dest_folder
+                {
+                    @"type":"folder"
+                    @"fullpath":@@(p,"uri")
+                    @"path":dir.name(@@(p,"uri"))
+                    @"name":file.name(@@(p,"uri"))
+                    @"privileges":@@(privs,"&privileges")
+                    @"priv_inherited":@@(privs,"#priv_inherited")
+                }
+
+                if dklfso.auth(dest_folder,@op_id_dkl_fso_mkdir) && not(dklfso.isprotected(@@(dest_folder,"fullpath")))
+                {
+                    do dir.ensure(ppath)
+                    exception{do rise_error(0,"No se pudo crear la estructura de directorios") }
+                }
+                else { do rise_error(0,"No está autorizado para crear la estructura de directorios") }
+            }
+
+            if not(dklfso.auth(dest_folder,@op_id_dkl_fso_upload)){ do rise_error(0,"No está autorizado para subir archivos en esta ubicación") }
+            if isanyword(tolower(file.extension(resource_uri)),tolower(@dklfso_danger_files_ext)) || isanyword(tolower(file.extension(dest)),tolower(@dklfso_danger_files_ext))
+            {
+                if not(dklfso.auth(dest_folder,@op_id_dkl_fso_danger)) 
+                {
+                    do rise_error(0,"No autorizado, extensión peligrosa")
+                }
+            }
+            do file.copy(path.concat(@@(p,"base_path",resource_uri)),dest) 
+        }
+    }
+
+    new p 
+    { 
+        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
+        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+    }
+
+    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+
+    new res { @"success": @true }
+
+    ref post_data=from.json(field.dstr(@http_context,"request/post_string","{}"))
+    ref uris=list.create_from_fields(post_data)
+    ref fres=record.create()
+
+    for i=0;i<@count(uris)
+    {
+        fres<list.str(uris,i)+"*">:record.create()
+        fres<list.str(uris,i)+"/done">:@false
+
+        if list.str(uris,i)=="." { resource_uri=@@(p,"uri") }
+        else{ resource_uri=ifstr(replace(dklfso.firstChar(list.str(uris,i)),"\\","/")=="/",list.str(uris,i) ,path.concat(@@(p,"uri"),list.str(uris,i))) }
+
+        ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
+
+        if isnull(obj) { do rise_error(0,"Resource not found") }
+        else
+        {
+            switch tolower(@@(post_data,list.str(uris,i)+"/action"))
+            {
+                case "delete"
+                {
+                    if not(dklfso.auth(obj,@op_id_dkl_fso_delete)) { do rise_error(0,"No autorizado") }
+                    if @@(obj,"type")=="folder" { do dir.delete(path.concat(@@(p,"base_path",resource_uri))) }
+                    else { do file.delete(path.concat(@@(p,"base_path",resource_uri))) }
+                }
+                case "copy"
+                {
+                    if not(dklfso.auth(obj,@op_id_dkl_fso_copy)) { do rise_error(0,"No autorizado") }
+                    do dklfso.copyFile(p,obj,post_data, uris,i)
+                }
+                case "move"
+                {
+                    if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented") }
+                    if not(dklfso.auth(obj,@op_id_dkl_fso_move)) { do rise_error(0,"No autorizado") }
+
+                    do dklfso.copyFile(p,obj,post_data, uris,i)
+                    do file.delete(path.concat(@@(p,"base_path",resource_uri))) 
+                }
+                case "rename"
+                {
+                    if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented") }
+                    if not(dklfso.auth(obj,@op_id_dkl_fso_rename)) { do rise_error(0,"No autorizado") }
+
+                    uris<list.str(i)+"to">:path.concat(dir.name(resource_uri), @@(uris,list.str(i)+"/as"))
+                    do dklfso.copyFile(p,obj,post_data, uris,i)
+                    do file.delete(path.concat(@@(p,"base_path",resource_uri)))
+                }
+                case "mkdir"
+                {
+                    if not(dklfso.auth(obj,@op_id_dkl_fso_mkdir)) { do rise_error(0,"No autorizado") }
+
+                    if @@(obj,"type")=="folder" { do dir.ensure(path.concat(resource_uri,@@(uris,list.str(i)+"/path"))) }
+                    else { do rise_error(0,"Action invalid") }
+                }
+                default { do rise_error(0,"Command invalid") }
+            }
+        }
+        exception
+        {
+            fres<list.str(uris,i)+"/message">:last_error()
+        }
+
+    }
+    
+    res<"data*">: fres
+
+    exception
+    {
+        res<"message">:last_error()
+        res<"success">:@false
+    }
+
+
+    @http_context<"response/headers/Content-Type">:"application/json;charset=utf-8"
+    @http_context<"response/output">:"text"
+    @http_context<"response/text">: to.json( res )
+}

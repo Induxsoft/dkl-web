@@ -1,0 +1,109 @@
+﻿#include "dkli.dkh"
+program "Devkron File System Operations (Dkl FSO) [Upload command]"
+{
+	#!
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+    #include "webauth.dkl"
+    #include "fso.config.dk"
+    #include "fso.dk"
+
+    new p 
+    { 
+        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
+        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+    }
+
+    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+
+    new res { @"success": @true }
+
+    ppath=path.concat(@@(p,"base_path"),@@(p,"uri"))
+    
+    ref obj=dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri"))
+
+    if isnull(obj)
+    {
+        ref privs=dklfso.getPrivs(ppath,@true )
+        if isnull(privs) { do rise_error(0, "No existe el folder indicado y no hay manifiesto de privilegios disponible") }
+
+        ref obj=record.create()
+        using obj
+        {
+            @"type":"folder"
+            @"fullpath":@@(p,"uri")
+            @"path":dir.name(@@(p,"uri"))
+            @"name":file.name(@@(p,"uri"))
+            @"privileges":@@(privs,"&privileges")
+            @"priv_inherited":@@(privs,"#priv_inherited")
+        }
+
+        if dklfso.auth(obj,@op_id_dkl_fso_mkdir) && not(dklfso.isprotected(@@(obj,"fullpath")))
+        {
+            do dir.ensure(ppath)
+            exception{do rise_error(0,"No se pudo crear la estructura de directorios") }
+        }
+        else { do rise_error(0,"No está autorizado para crear la estructura de directorios") }
+    }
+
+    if @@(obj,"type")!="folder" { do rise_error(0,"El destino no es un directorio") }
+    if not(dklfso.auth(obj,@op_id_dkl_fso_upload)){ do rise_error(0,"No está autorizado para subir archivos en esta ubicación") }
+    
+    ref files=field.obj(@http_context,"request/files")
+
+    if list.count(files)<1 { do rise_error(0,"No se han enviado archivos") }
+
+    ref fres=record.create()
+
+    for i=0;i<list.count(files)
+    {
+        ref f=list.obj(files,i)
+        
+        fres<field.str(f,"filename")+"*">:record.create()
+        au=@true
+
+        if file.exists(path.concat(ppath,field.str(f,"filename")))
+        {
+            if not(dklfso.auth(dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri")),@op_id_dkl_fso_upload)) 
+            {
+                au=@false
+                fres<field.str(f,"filename")+"/message">:"No autorizado"
+            }
+        }
+
+        if au && isanyword(tolower(file.extension(path.concat(ppath,field.str(f,"filename")))),tolower(@dklfso_danger_files_ext))
+        {
+            if not(dklfso.auth(dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri")),@op_id_dkl_fso_danger)) 
+            {
+                au=@false
+                fres<field.str(f,"filename")+"/message">:"No autorizado"
+            }
+        }
+
+        if au { do file.copy(field.str(f,"temp_file"),path.concat(ppath,field.str(f,"filename"))) }
+        exception
+        {
+            au=@false
+            fres<field.str(f,"filename")+"/message">:last_error()
+        }
+
+        fres<field.str(f,"filename")+"/done">:au
+    }
+
+    res<"data*">: fres
+
+    exception
+    {
+        res<"message">:last_error()
+        res<"success">:@false
+    }
+
+
+    @http_context<"response/headers/Content-Type">:"application/json;charset=utf-8"
+    @http_context<"response/output">:"text"
+    @http_context<"response/text">: to.json( res )
+}

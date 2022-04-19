@@ -1,0 +1,270 @@
+#include "dkli.dkh"
+#!
+module "Devkron File System Operations (Dkl FSO) [lib]"
+{
+    dklfso.firstChar::s
+    {
+        if s=="" { return "" }
+        return substring(s,0,1)
+    }
+
+    dklfso.lastChar::s
+    {
+        if s=="" { return "" }
+        return substring(s,length(s)-1,1)
+    }
+
+    dklfso.isprotected::uri
+    {
+        if @dklfso_protected_dir!="" && @dklfso_protected_dir_restricted
+        {
+            u_requested=replace(trim(tolower(uri)),"\\","/")
+            u_protected=replace(trim(@dklfso_protected_dir),"\\","/")
+            
+            if u_protected!="" && u_requested!=""
+            {
+                if dklfso.firstChar(u_requested)!="/" { u_requested="/"+u_requested } 
+                if dklfso.firstChar(u_protected)!="/" { u_protected="/"+u_protected }
+                
+                if dklfso.lastChar(u_requested)!="/" { u_requested=u_requested+"/" } 
+                if dklfso.lastChar(u_protected)!="/" { u_protected=u_protected+"/" }
+                
+                if findstr(u_requested,u_protected)==0 { return @true }
+            }
+        }
+
+        return @false
+    }
+
+    dklfso.defaultAuthObject::&fi, op
+    {
+        if field.typeof(fi,"privileges")!=3 { return @false } //Denegar si no hay privilegios explícitos
+
+    	if isnull(@@(fi,"&privileges")) { return @false } //Denegar si es nulo el manifiesto de permisos
+
+        if field.typeof(@http_context,"session")!=3 { return @false } //No hay una sesión
+        if isnull(@@(@http_context,"&session")) { return @false } //Sesión nula
+	    if field.typeof(@http_context,"session/user")!=3 { return @false } //No hay información del usuario
+        if isnull(@@(@http_context,"&session/user")) { return @false } //Información del usuario nula
+
+	    //Verificar los permisos
+	    ref privs=auth.checkPrivs(@@(@http_context,"&session/user"), @@(fi,"&privileges"))
+
+        return dklfso.authOp(op, privs)
+    }
+
+    dklfso.auth::&fi,op
+    {
+        isauth=@true
+
+        if not(isnull(@dklfso.funcAuthObject))
+        {
+            that @dklfso.funcAuthObject(fi,op) -> isauth
+        }
+
+        return isauth
+    }
+
+    dklfso.defaultSearchInFile::text,file
+    {
+        return findstr(file.rtext(file),text)>=0
+    }
+
+    point @dklfso.funcAuthObject to dklfso.defaultAuthObject
+    point @dklfso.funcSearchInFile to dklfso.defaultSearchInFile
+
+    dklfso.createObjectInfo::base_path,uri
+    {
+        p=path.concat(base_path,uri)
+        tp=""
+        if dir.exists(p) { tp="folder" }
+        else if file.exists(p) { tp="file" }
+        else { return @null }
+        uri=replace(uri,"\\","/")
+        new r 
+        { 
+            @"type":tp 
+            @"fullpath":uri
+            @"path":dir.name(uri)
+            @"name":file.name(uri)
+        }
+
+        do dklfso.objectInfo(r,base_path)
+
+        return r
+    }
+
+    dklfso.getPrivs::&physicalPath,isfolder
+    {
+        ref fi =@null
+        privs=ifstr(isfolder,path.concat(physicalPath,@dklfso_privs_ext),physicalPath+@dklfso_privs_ext)
+
+        i=0
+        while @true
+        {
+            if file.exists(privs)
+            {
+                ref fi=record.create()
+                fi<"privileges*">:from.json(file.rtext(privs))
+                fi<"priv_inherited">:i
+                exception{}
+                break
+            }
+            
+            if file.justname(privs)=="" { privs=dir.name(privs) }
+            
+            privs=path.concat(dir.name(privs),@dklfso_privs_ext)
+            
+            if dir.name(privs)==dir.name(base_path) { break }
+
+            exception { }
+            i=i+1
+
+            if i>@dklfso_privs_revdeep { break }
+        }
+
+        return fi
+    }
+
+    dklfso.objectInfo::&fi, base_path
+    {
+        ref netInfo=_new("System.IO.FileInfo",path.concat(base_path,@@(fi,"fullpath")))
+
+        fi<"creation">:date_str(_get(netInfo,"&CreationTimeUtc"),"yyyy-MM-ddThh:mm:ss")
+        fi<"lastaccess">:date_str(_get(netInfo,"&LastAccessTimeUtc"),"yyyy-MM-ddThh:mm:ss")
+        fi<"lastwrite">:date_str(_get(netInfo,"&LastWriteTimeUtc"),"yyyy-MM-ddThh:mm:ss")
+
+        if @@(fi,"type")=="folder"
+        {
+            metadata=path.concat(path.concat(base_path, @@(fi,"fullpath")),@dklfso_metadata_ext)
+        }
+        else
+        {
+            metadata=path.concat(base_path, @@(fi,"fullpath")+@dklfso_metadata_ext)
+        }
+        
+        if file.exists(metadata)
+        {
+            fi<"properties*">:from.json(file.rtext(metadata))
+            exception { }
+        }
+
+        ref privs=dklfso.getPrivs( path.concat(base_path, @@(fi,"fullpath")), @@(fi,"type")=="folder" )
+
+        if not(isnull(privs))
+        {
+            fi<"privileges*">:@@(privs,"&privileges")
+            fi<"priv_inherited">:@@(privs,"#priv_inherited")
+        }
+
+        
+    }
+
+    dklfso.findinfile::text,file
+    {
+        if isnull(@dklfso.funcSearchInFile) { return @true }
+
+        r=@false
+
+        that @dklfso.funcSearchInFile(text,file)->r
+
+        return r
+    }    
+
+    dklfso.list::&params
+    {
+        if trim(@@(params,"base_path"))=="" { do rise_error(0,"Invalid base_path")}
+        
+        if @@(params,"deep")<0 { return @null }
+        params<"deep">:@@(params,"deep")-1
+
+        if isnull(@@(params,"&found")) {params<"found*">:list.create()}
+
+        new res { }
+        path=path.concat(@@(params,"base_path"),@@(params,"uri"))
+        uri=@@(params,"uri")
+        ref root=dklfso.createObjectInfo(@@(params,"base_path"),uri)
+        if not (dklfso.auth(root,@op_id_dkl_fso_list)) { return @null }
+        
+        if @@(params,"mode")==0 || @@(params,"mode")==1 || @@(params,"mode")==3
+        {
+            ref d=list.dirs(path)
+            ref ld=list.create()
+
+            for i=0;i<@count(d)
+            {
+                ref di=record.create()
+                di<"type">:"folder"
+                di<"name">:file.name(list.str(d,i))
+                di<"path">:replace(uri,"\\","/")
+                di<"fullpath">:replace(path.concat(uri,file.name(list.str(d,i))),"\\","/")
+                do dklfso.objectInfo(di,@@(params,"base_path"))
+
+                if dklfso.auth(di,@op_id_dkl_fso_list) && not(dklfso.isprotected(@@(di,"fullpath")))
+                {
+                    params<"uri">:path.concat(uri,@@(di,"name"))
+
+                    ref subs=dklfso.list(params)
+                    if not(isnull(subs))
+                    {
+                        di<"folders*">:@@(subs,"&folders")
+                        di<"files*">:@@(subs,"&files")
+                    }
+
+                    if not(isnull(di)) { do list.add(ld,di) }
+                }
+            }
+
+            if @count(ld)<1 { ref ld=@null }
+            res<"folders*">:ld
+            exception{}
+        }
+
+        if @@(params,"mode")==0 || @@(params,"mode")==2 || @@(params,"mode")==3
+        {
+            ref f=list.files(path,@@(params,"filter"))
+            ref lf=list.create()
+
+            for i=0;i<@count(f)
+            {
+                if file.extension(list.str(f,i))!=@dklfso_privs_ext && file.extension(list.str(f,i))!=@dklfso_metadata_ext
+                {
+
+                    ref fi=record.create()
+                    fi<"type">:"file"
+                    fi<"name">:file.name(list.str(f,i))
+                    fi<"path">:replace(uri,"\\","/")
+                    fi<"fullpath">:replace(path.concat(uri,file.name(list.str(f,i))),"\\","/")
+                    do dklfso.objectInfo(fi,@@(params,"base_path"))
+                    if dklfso.auth(fi,@op_id_dkl_fso_list) && not(dklfso.isprotected(@@(fi,"fullpath")))
+                    {
+                        if not(isnull(fi)) 
+                        { 
+                            flag=@true
+                            if trim(@@(params,"search"))!="" 
+                            {
+                                flag=@false
+                                if file.len(list.str(f,i))<=@dklfso_textfile_maxsize_r4search
+                                {
+                                    flag=dklfso.findinfile(@@(params,"search"),list.str(f,i))
+                                }
+                            }
+                            if flag
+                            {
+                                do list.add(lf,fi) 
+                                if @@(params,"mode")==3 { do list.add(@@(params,"&found"),fi)}
+                            }
+                        }
+                    }
+
+                }
+                
+            }
+            if @count(lf)<1 { ref lf=@null }
+            res<"files*">:lf
+            exception{}
+        }
+
+        return res
+    }
+}

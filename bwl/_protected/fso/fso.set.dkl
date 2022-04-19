@@ -1,0 +1,94 @@
+﻿#include "dkli.dkh"
+program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
+{
+	#!
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+    #include "webauth.dkl"
+    #include "fso.config.dk"
+    #include "fso.dk"
+
+    new p 
+    { 
+        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
+        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+    }
+
+    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+
+    new res { @"success": @true }
+
+    ref post_data=from.json(field.dstr(@http_context,"request/post_string","{}"))
+    ref uris=list.create_from_fields(post_data)
+    ref fres=record.create()
+
+    for i=0;i<@count(uris)
+    {
+        fres<list.str(uris,i)+"*">:record.create()
+        fres<list.str(uris,i)+"/props_done">:@false
+        fres<list.str(uris,i)+"/privs_done">:@false
+        
+        if list.str(uris,i)=="." { resource_uri=@@(p,"uri") }
+        else{ resource_uri=ifstr(replace(dklfso.firstChar(list.str(uris,i)),"\\","/")=="/",list.str(uris,i) ,path.concat(@@(p,"uri"),list.str(uris,i))) }
+        ref obj=ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
+
+        if isnull(obj) { do rise_error(0,"Resource not found") }
+        else
+        {
+            if not(isnull(@@(post_data,"&"+list.str(uris,i)+"/properties")))
+            {
+                if dklfso.auth(obj,@op_id_dkl_fso_setprops)
+                {
+                    if @@(obj,"type")=="folder"
+                    {
+                        do file.wtext(path.concat(path.concat(@@(p,"base_path"),resource_uri),@dklfso_metadata_ext),to.json(@@(post_data,"&"+list.str(uris,i)+"/properties")))
+                    }
+                    else
+                    {
+                        do file.wtext(path.concat(@@(p,"base_path"),resource_uri+@dklfso_metadata_ext),to.json(@@(post_data,"&"+list.str(uris,i)+"/properties")))
+                    }
+                    fres<list.str(uris,i)+"/props_done">:@true
+                }
+                else { do rise_error(0,"No está autorizado") }
+            }
+            if not(isnull(@@(post_data,"&"+list.str(uris,i)+"/privileges")))
+            {
+                if dklfso.auth(obj,@op_id_dkl_fso_setprivs)
+                {
+                    if @@(obj,"type")=="folder"
+                    {
+                        do file.wtext(path.concat(path.concat(@@(p,"base_path"),resource_uri),@dklfso_privs_ext),to.json(@@(post_data,"&"+list.str(uris,i)+"/privileges")))
+                    }
+                    else
+                    {
+                        do file.wtext(path.concat(@@(p,"base_path"),resource_uri+@dklfso_privs_ext),to.json(@@(post_data,"&"+list.str(uris,i)+"/privileges")))
+                    }
+                    fres<list.str(uris,i)+"/privs_done">:@true
+                }
+                else { do rise_error(0,"No está autorizado") }
+            }
+        }
+        exception
+        {
+            fres<list.str(uris,i)+"/message">:last_error()
+        }
+
+    }
+    
+    res<"data*">: fres
+
+    exception
+    {
+        res<"message">:last_error()
+        res<"success">:@false
+    }
+
+
+    @http_context<"response/headers/Content-Type">:"application/json;charset=utf-8"
+    @http_context<"response/output">:"text"
+    @http_context<"response/text">: to.json( res )
+}
