@@ -3,7 +3,7 @@
 module "Devkron File System Operations (Dkl FSO) [Configuration]"
 {
     @dklfso_websites_path="web" // Carpeta predeterminada para sitios Web
-    @dklfso_multisites=@true    // Si es @true permite acceder al sistema de archivos de todos los sitios en la instancia
+    @dklfso_multisites=@false    // Si es @true permite acceder al sistema de archivos de todos los sitios en la instancia
 
     @dklfso_metadata_ext="._m_" // Extensión para archivos de metadatos
     @dklfso_privs_ext="._p_"    // Extensión para archivos de privilegios
