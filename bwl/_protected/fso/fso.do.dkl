@@ -121,6 +121,7 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
                 }
                 default { do rise_error(0,"Command invalid") }
             }
+            fres<list.str(uris,i)+"/done">:@true
         }
         exception
         {
