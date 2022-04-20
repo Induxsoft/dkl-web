@@ -34,7 +34,7 @@ program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
         
         if list.str(uris,i)=="." { resource_uri=@@(p,"uri") }
         else{ resource_uri=ifstr(replace(dklfso.firstChar(list.str(uris,i)),"\\","/")=="/",list.str(uris,i) ,path.concat(@@(p,"uri"),list.str(uris,i))) }
-        ref obj=ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
+        ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
 
         if isnull(obj) { do rise_error(0,"Resource not found") }
         else
