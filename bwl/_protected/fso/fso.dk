@@ -133,7 +133,7 @@ module "Devkron File System Operations (Dkl FSO) [lib]"
         fi<"creation">:date_str(_get(netInfo,"&CreationTimeUtc"),"yyyy-MM-ddThh:mm:ss")
         fi<"lastaccess">:date_str(_get(netInfo,"&LastAccessTimeUtc"),"yyyy-MM-ddThh:mm:ss")
         fi<"lastwrite">:date_str(_get(netInfo,"&LastWriteTimeUtc"),"yyyy-MM-ddThh:mm:ss")
-
+        
         if @@(fi,"type")=="folder"
         {
             metadata=path.concat(path.concat(base_path, @@(fi,"fullpath")),@dklfso_metadata_ext)
@@ -141,6 +141,7 @@ module "Devkron File System Operations (Dkl FSO) [lib]"
         else
         {
             metadata=path.concat(base_path, @@(fi,"fullpath")+@dklfso_metadata_ext)
+            fi<"length">:_get(netInfo,"#Length") 
         }
         
         if file.exists(metadata)

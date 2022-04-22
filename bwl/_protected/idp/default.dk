@@ -19,8 +19,11 @@ module "Proveedor de Identidades [Id Provider] de Induxsoft"
 		ref lgres=from.json(http.request("https://api.induxsoft.net/auth/login/","POST",h,to.json(srq)))
 		if @@(lgres,"#success") 
 		{
-			 @http_context<"session/user*">: @@(lgres,"&data") 
-			 do cookie.set("__induxsoft_token",token)
+			@http_context<"session/user*">: @@(lgres,"&data") 
+			new idp { @"name":"induxsoft_idp" }
+			@http_context<"session/idp*">: idp
+
+			do cookie.set("__induxsoft_token",token)
 		}
 		else { do cookie.set("__induxsoft_token","") }
 		exception { }

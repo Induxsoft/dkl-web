@@ -1,0 +1,64 @@
+﻿#include "dkli.dkh"
+#!
+module "Proveedor de Identidades [Id Provider] desde base de datos"
+{
+	#include "cookies.dkl"
+    #include "dbr.dkh"
+	
+    dbqname="yourconnection@appgroup"
+
+	//Recuperar sesión del usuario
+	token=auth.token()
+
+	if token!=""
+	{
+        ref db=dbr.reconnect(dbqname,token)
+
+        ref uinfo=dbr.rec(db,"select u.userId, u.userName from tuser u inner join sys_session s on u.sys_pk=s.iuser where s.sys_guid=@ids;",params)
+
+        new res
+        {
+            @"ids":token
+            @"uid":field.str(uinfo,"userId")
+            @"name":field.str(uinfo,"userName")
+            @"multifactor":@false
+            @"verified_email":@false
+            @"verified_mobile":@false
+        }
+
+        
+        ref lteams=dbr.list(db,"select g.sys_guid group_uuid,groupid, u.userid 
+                            from `user_usergroup_` as ug inner join `usergroup` as g  on ug.groups=g.sys_pk 
+                                inner join tuser as u on ug.users=u.sys_pk 
+                            where u.userid=@uid;",res)
+        
+        res<"memberships*">:record.create()
+        res<"memberships/workspaces*">:list.create()
+        res<"memberships/roles*">:list.create()
+        res<"memberships/teams*">:list.create()
+
+        do list.add(@@(res,"memberships/&workspaces"),dbqname)
+
+        for i=0;i<@count(lteams)
+        {
+            do list.add(@@(res,"memberships/&teams"),@@(@item(lteams,i),"group_uuid"))
+        }
+
+        new idp
+        {
+            @"name":"db_idp"
+            @"qname":dbqname
+            @"database*":db
+        }
+
+        @http_context<"session/user*">: res
+        @http_context<"session/idp*">: idp
+
+	    do cookie.set("__induxsoft_token",token)
+        
+        exception
+        {
+            do cookie.set("__induxsoft_token","")
+        }
+    }
+}
