@@ -9,15 +9,26 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
     #include "fso.config.dk"
     #include "fso.dk"
 
-    dklfso.copyFile::&p, &obj, &post_data, &uris, i
+    dklfso.copyFile::&p, &obj, &post_data, &uris, i,has_filename
     {
         if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented")}
         else 
         { 
-            ref dest_folder=dklfso.createObjectInfo(@@(p,"base_path"),@@(post_data,list.str(uris,i)+"/to"))
+            resource_uri=@@(obj,"fullpath")
+            if has_filename
+            {
+                target_dir=dir.name(@@(post_data,list.str(uris,i)+"/to"))
+                target_file=file.name(@@(post_data,list.str(uris,i)+"/to"))
+            }
+            else
+            {
+                target_dir=@@(post_data,list.str(uris,i)+"/to")
+                target_file=file.name(resource_uri)
+            }
+            ref dest_folder=dklfso.createObjectInfo(@@(p,"base_path"),target_dir)
             if isnull(dest_folder)
             {
-                ppath=path.concat(@@(p,"base_path"),@@(post_data,list.str(uris,i)+"/to"))
+                ppath=path.concat(@@(p,"base_path"),target_dir)
                 ref privs=dklfso.getPrivs(ppath,@true )
                 if isnull(privs) { do rise_error(0, "No existe el folder indicado y no hay manifiesto de privilegios disponible") }
 
@@ -31,7 +42,7 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
                     @"privileges":@@(privs,"&privileges")
                     @"priv_inherited":@@(privs,"#priv_inherited")
                 }
-
+                
                 if dklfso.auth(dest_folder,@op_id_dkl_fso_mkdir) && not(dklfso.isprotected(@@(dest_folder,"fullpath")))
                 {
                     do dir.ensure(ppath)
@@ -39,16 +50,19 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
                 }
                 else { do rise_error(0,"No está autorizado para crear la estructura de directorios") }
             }
-
+            
             if not(dklfso.auth(dest_folder,@op_id_dkl_fso_upload)){ do rise_error(0,"No está autorizado para subir archivos en esta ubicación") }
-            if isanyword(tolower(file.extension(resource_uri)),tolower(@dklfso_danger_files_ext)) || isanyword(tolower(file.extension(dest)),tolower(@dklfso_danger_files_ext))
+            if isanyword(tolower(file.extension(resource_uri)),tolower(@dklfso_danger_files_ext)) || isanyword(tolower(file.extension(target_file)),tolower(@dklfso_danger_files_ext))
             {
                 if not(dklfso.auth(dest_folder,@op_id_dkl_fso_danger)) 
                 {
                     do rise_error(0,"No autorizado, extensión peligrosa")
                 }
             }
-            do file.copy(path.concat(@@(p,"base_path",resource_uri)),dest) 
+            
+            src=path.concat(@@(p,"base_path"),resource_uri)
+            dest=path.concat(@@(p,"base_path"),path.concat(target_dir,target_file))
+            do file.copy(src,dest) 
         }
     }
 
@@ -87,36 +101,37 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
                 case "delete"
                 {
                     if not(dklfso.auth(obj,@op_id_dkl_fso_delete)) { do rise_error(0,"No autorizado") }
-                    if @@(obj,"type")=="folder" { do dir.delete(path.concat(@@(p,"base_path",resource_uri))) }
-                    else { do file.delete(path.concat(@@(p,"base_path",resource_uri))) }
+                    if @@(obj,"type")=="folder" { do dir.delete(path.concat(@@(p,"base_path"),resource_uri)) }
+                    else { do file.delete(path.concat(@@(p,"base_path"),resource_uri)) }
                 }
                 case "copy"
                 {
                     if not(dklfso.auth(obj,@op_id_dkl_fso_copy)) { do rise_error(0,"No autorizado") }
-                    do dklfso.copyFile(p,obj,post_data, uris,i)
+                    do dklfso.copyFile(p,obj,post_data, uris,i,@false)
                 }
                 case "move"
                 {
                     if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented") }
                     if not(dklfso.auth(obj,@op_id_dkl_fso_move)) { do rise_error(0,"No autorizado") }
 
-                    do dklfso.copyFile(p,obj,post_data, uris,i)
-                    do file.delete(path.concat(@@(p,"base_path",resource_uri))) 
+                    do dklfso.copyFile(p,obj,post_data, uris,i,@false)
+                    do file.delete(path.concat(@@(p,"base_path"),resource_uri))
                 }
                 case "rename"
                 {
                     if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented") }
                     if not(dklfso.auth(obj,@op_id_dkl_fso_rename)) { do rise_error(0,"No autorizado") }
 
-                    uris<list.str(i)+"to">:path.concat(dir.name(resource_uri), @@(uris,list.str(i)+"/as"))
-                    do dklfso.copyFile(p,obj,post_data, uris,i)
-                    do file.delete(path.concat(@@(p,"base_path",resource_uri)))
+                    post_data<list.str(uris,i)+"/to">:path.concat(dir.name(resource_uri), @@(post_data,list.str(uris,i)+"/as"))
+                    do dklfso.copyFile(p,obj,post_data, uris,i,@true)
+                    do file.delete(path.concat(@@(p,"base_path"),resource_uri))
                 }
                 case "mkdir"
                 {
                     if not(dklfso.auth(obj,@op_id_dkl_fso_mkdir)) { do rise_error(0,"No autorizado") }
-
-                    if @@(obj,"type")=="folder" { do dir.ensure(path.concat(resource_uri,@@(uris,list.str(i)+"/path"))) }
+                    trg=replace(path.concat(@@(p,"base_path"),path.concat(resource_uri,@@(post_data,list.str(uris,i)+"/path"))),"\\","/")
+                    
+                    if @@(obj,"type")=="folder" { do dir.ensure(trg) }
                     else { do rise_error(0,"Action invalid") }
                 }
                 default { do rise_error(0,"Command invalid") }

@@ -36,6 +36,20 @@ program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
         else{ resource_uri=ifstr(replace(dklfso.firstChar(list.str(uris,i)),"\\","/")=="/",list.str(uris,i) ,path.concat(@@(p,"uri"),list.str(uris,i))) }
         ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
 
+        if isnull(obj) && field.exist(post_data,list.str(uris,i)+"/text")
+        {
+            ref folder_obj=dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri"))
+            if dklfso.auth(folder_obj,@op_id_dkl_fso_upload)
+            {
+                if isanyword(tolower(file.extension(resource_uri)),tolower(@dklfso_danger_files_ext))
+                {
+                    if not(dklfso.auth(folder_obj,@op_id_dkl_fso_danger)) { do rise_error(0,"No está autorizado, extensión restringida") } 
+                }
+                do file.wtext(path.concat(@@(p,"base_path"),resource_uri),"")            
+                ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
+            }
+        }
+
         if isnull(obj) { do rise_error(0,"Resource not found") }
         else
         {
@@ -70,6 +84,25 @@ program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
                     fres<list.str(uris,i)+"/privs_done">:@true
                 }
                 else { do rise_error(0,"No está autorizado") }
+            }
+
+            if field.exist(post_data,list.str(uris,i)+"/text") && @@(obj,"type")=="file"
+            {
+                fres<list.str(uris,i)+"/txt_done">:@false
+
+                if dklfso.auth(obj,@op_id_dkl_fso_overwrite)
+                {
+                    if isanyword(tolower(file.extension(resource_uri)),tolower(@dklfso_danger_files_ext))
+                    {
+                        if not(dklfso.auth(resource_uri,@op_id_dkl_fso_danger)) { do rise_error(0,"No está autorizado, extensión restringida") } 
+                    }
+                    do file.wtexte(path.concat(@@(p,"base_path"),resource_uri),@@(post_data,"$"+list.str(uris,i)+"/text"),field.dstr(post_data,list.str(uris,i)+"/text_encode","utf8"))                    
+                    fres<list.str(uris,i)+"/txt_done">:@true
+                }
+                else 
+                { 
+                    do rise_error(0,"No está autorizado") 
+                }
             }
         }
         exception
