@@ -19,7 +19,8 @@ program
 
 	//Recuperar manifiesto de privilegios del recurso solicitado
 	
-	uri=list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0)
+	do _map_function(_import_library("System.Net.dll"),"System.Net.WebUtility","UrlDecode","net.urldecode","System.String","$")
+	uri=net.urldecode(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
 
 	ref res_info=dklfso.createObjectInfo(base_path,uri)
 	
