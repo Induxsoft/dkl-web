@@ -38,17 +38,22 @@ module "Devkron File System Operations (Dkl FSO) [lib]"
 
     dklfso.defaultAuthObject::&fi, op
     {
+        
+
         if field.typeof(fi,"privileges")!=3 { return @false } //Denegar si no hay privilegios explícitos
 
     	if isnull(@@(fi,"&privileges")) { return @false } //Denegar si es nulo el manifiesto de permisos
 
-        if field.typeof(@http_context,"session")!=3 { return @false } //No hay una sesión
-        if isnull(@@(@http_context,"&session")) { return @false } //Sesión nula
-	    if field.typeof(@http_context,"session/user")!=3 { return @false } //No hay información del usuario
-        if isnull(@@(@http_context,"&session/user")) { return @false } //Información del usuario nula
-
+        if @@(@http_context,"session/user/uid")=="" 
+        { 
+             new user
+             {
+                 @"uid":"*"
+             }
+        }
+        else { ref user=@@(@http_context,"&session/user") }
 	    //Verificar los permisos
-	    ref privs=auth.checkPrivs(@@(@http_context,"&session/user"), @@(fi,"&privileges"))
+	    ref privs=auth.checkPrivs(user, @@(fi,"&privileges"))
 
         return dklfso.authOp(op, privs)
     }

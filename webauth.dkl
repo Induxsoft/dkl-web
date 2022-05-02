@@ -140,7 +140,7 @@ module "authorization"
                     {
                         case "user"
                         {
-                            if @@(login,"uid")==value 
+                            if @@(login,"uid")==value || value=="+"
                             {
                                  do list.add(privs,list.str(test_privs,i))
                                  value=""
