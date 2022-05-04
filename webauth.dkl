@@ -181,9 +181,9 @@ module "authorization"
                                     value=""
                                 }
                             }
-                            else if field.exist(params,list.str(lk,0))
+                            else if field.exist(login,list.str(lk,0))
                             {
-                                if @@(params,list.str(lk,0))==value 
+                                if @@(login,list.str(lk,0))==value 
                                 {
                                     do list.add(privs,list.str(test_privs,i))
                                     value=""

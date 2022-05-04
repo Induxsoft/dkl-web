@@ -30,7 +30,14 @@ program
 	
 	@http_context<"session/resource*">:res_info
 
-	ref privs=auth.checkPrivs(@@(@http_context,"&session/user"), @@(res_info,"&privileges"))
+	ref user=@@(@http_context,"&session/user")
+	if isnull(user)
+	{
+		ref user=record.create()
+		using user{@"uid":"*"}
+	}
+
+	ref privs=auth.checkPrivs(user, @@(res_info,"&privileges"))
 	@http_context<"session/resource/authforuser*">:privs
 	
 	if field.typeof(res_info,"privileges/"+@privid_read)!=3 { return } //Abortar si no está establecido explícitamente el privilegio de lectura
