@@ -35,6 +35,8 @@ module "Devkron File System Operations (Dkl FSO) [Configuration]"
     @op_id_dkl_fso_upload      ="dkl_fso_upload"
     @op_id_dkl_fso_overwrite   ="dkl_fso_overwrite"
     @op_id_dkl_fso_danger      ="dkl_fso_danger"
+    @op_id_dkl_fso_zip         ="dkl_fso_zip"
+    @op_id_dkl_fso_unzip       ="dkl_fso_unzip"
 
     //Permisos predeterminados
     @privid_admin               ="admin"
@@ -113,6 +115,14 @@ module "Devkron File System Operations (Dkl FSO) [Configuration]"
             }
 
             case @op_id_dkl_fso_danger
+            {
+                return ( auth.findStrInList(privs,@privid_write) && auth.findStrInList(privs,@privid_plus) )
+            }
+            case @op_id_dkl_fso_zip
+            {
+                return auth.findStrInList(privs,@privid_write) || ( auth.findStrInList(privs,@privid_read) && auth.findStrInList(privs,@privid_plus) )               
+            }
+            case @op_id_dkl_fso_unzip
             {
                 return ( auth.findStrInList(privs,@privid_write) && auth.findStrInList(privs,@privid_plus) )
             }

@@ -34,8 +34,9 @@ program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
         
         if list.str(uris,i)=="." { resource_uri=@@(p,"uri") }
         else{ resource_uri=ifstr(replace(dklfso.firstChar(list.str(uris,i)),"\\","/")=="/",list.str(uris,i) ,path.concat(@@(p,"uri"),list.str(uris,i))) }
+        
         ref obj=dklfso.createObjectInfo(@@(p,"base_path"),resource_uri)
-
+        
         if isnull(obj) && field.exist(post_data,list.str(uris,i)+"/text")
         {
             ref folder_obj=dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri"))
@@ -88,7 +89,7 @@ program "Devkron File System Operations (Dkl FSO) [Set Properties command]"
 
             if field.exist(post_data,list.str(uris,i)+"/text") && @@(obj,"type")=="file"
             {
-                fres<list.str(uris,i)+"/txt_done">:@false
+                fres<list.str(uris,i)+"/txt_done">:@true
 
                 if dklfso.auth(obj,@op_id_dkl_fso_overwrite)
                 {
