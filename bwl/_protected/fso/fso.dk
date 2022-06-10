@@ -1,7 +1,28 @@
-#include "dkli.dkh"
+﻿#include "dkli.dkh"
 #!
 module "Devkron File System Operations (Dkl FSO) [lib]"
 {
+    do _map_function(_import_library("System.Net.dll"),"System.Net.WebUtility","UrlDecode","net.urldecode","System.String","$")
+
+    dklfso.parseRequest::
+    {
+        
+        new p
+        {
+            @"base_path":field.dstr(@http_context,"request/headers/document_root","")
+            @"uri": dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+        }
+
+        if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
+        if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
+
+        if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
+
+        p<"uri">:net.urldecode(@@(p,"uri"))
+
+        return p
+    }
+
     dklfso.firstChar::s
     {
         if s=="" { return "" }
@@ -39,7 +60,6 @@ module "Devkron File System Operations (Dkl FSO) [lib]"
     dklfso.defaultAuthObject::&fi, op
     {
         
-
         if field.typeof(fi,"privileges")!=3 { return @false } //Denegar si no hay privilegios explícitos
 
     	if isnull(@@(fi,"&privileges")) { return @false } //Denegar si es nulo el manifiesto de permisos

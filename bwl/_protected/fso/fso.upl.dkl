@@ -9,17 +9,8 @@ program "Devkron File System Operations (Dkl FSO) [Upload command]"
     #include "fso.config.dk"
     #include "fso.dk"
 
-    new p 
-    { 
-        @"base_path": field.dstr(@http_context,"request/headers/document_root","")
-        @"uri"      : dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
-    }
-
-    if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
-    if field.exist(@http_context,"request/get/uri") { p<"uri">:@@(@http_context,"request/get/uri") }
-
-    if field.exist(@http_context,"request/get/host") && @dklfso_multisites { p<"base_path">: path.concat(@dklfso_websites_path,@@(@http_context,"request/get/host")) }
-
+    ref p=dklfso.parseRequest()
+    
     new res { @"success": @true }
 
     ppath=path.concat(@@(p,"base_path"),@@(p,"uri"))
