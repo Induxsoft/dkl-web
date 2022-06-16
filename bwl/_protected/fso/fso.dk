@@ -6,11 +6,13 @@ module "Devkron File System Operations (Dkl FSO) [lib]"
 
     dklfso.parseRequest::
     {
-        
+        uri_part=trim(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0))
+        if uri_part=="" {uri_part="/" }
+        if uri_part!="/" && uri_part!="\\" { uri_part=dir.name(uri_part) }
         new p
         {
             @"base_path":field.dstr(@http_context,"request/headers/document_root","")
-            @"uri":replace(net.urldecode( dir.name(list.str(split(field.dstr(@http_context,"request/headers/request_uri","/"),"?"),0)) ),"\\","/")
+            @"uri":replace(net.urldecode( uri_part),"\\","/")
         }
 
         if field.exist(@http_context,"request/get/base_path") && @dklfso_multisites { p<"base_path">:@@(@http_context,"request/get/base_path") }
