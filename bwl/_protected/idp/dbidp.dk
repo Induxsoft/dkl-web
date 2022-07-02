@@ -40,11 +40,11 @@ module "Proveedor de Identidades [Id Provider] desde base de datos"
         res<"memberships/roles*">:list.create()
         res<"memberships/teams*">:list.create()
 
-        do list.add(@@(res,"memberships/&workspaces"),dbqname)
+        do list.add(@@(res,"&memberships/workspaces"),dbqname)
 
         for i=0;i<@count(lteams)
         {
-            do list.add(@@(res,"memberships/&teams"),@@(@item(lteams,i),"group_uuid"))
+            do list.add(@@(res,"&memberships/teams"),@@(@item(lteams,i),"group_uuid"))
         }
 
         new idp
