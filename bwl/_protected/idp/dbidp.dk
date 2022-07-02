@@ -13,7 +13,10 @@ module "Proveedor de Identidades [Id Provider] desde base de datos"
 	if token!=""
 	{
         ref db=dbr.reconnect(dbqname,token)
-
+	new params
+	{
+		@"ids":token
+	}
         ref uinfo=dbr.rec(db,"select u.userId, u.userName from tuser u inner join sys_session s on u.sys_pk=s.iuser where s.sys_guid=@ids;",params)
 
         new res
