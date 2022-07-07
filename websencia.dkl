@@ -1,0 +1,510 @@
+﻿#include "dkli.dkh"
+#!
+module "webscencia"
+{
+
+    @default_tagName="div"
+    @dkl_att_prefix="data-dkl-property-"
+    @dynamic_attribute="data-dkl-dynamic"
+    @member_attribute="data-dkl-member"
+    @attlist_attribute="data-dkl-attributes"
+    @dkl_att_reserved="data-dkl-member,data-dkl-attributes, data-dkl-dynamic"
+    @innerComponentsMark="@innerComponents"
+    @no_dynamic=@false
+    @no_styles=@false
+    @no_script=@false
+
+    #!
+    downloadImages::&attributes
+    {
+        if not (isset("@url_download_assets")) || not(isset("@local_assets_folder")) || not (isset("@relative_img_folder")) { return }
+        if @url_download_assets=="" || @local_assets_folder=="" { return }
+
+        if contains(@@(attributes,"src"),@url_download_assets)
+        {
+            do dir.ensure(@local_assets_folder)
+            dest=path.concat(@local_assets_folder,file.name(@@(attributes,"src")))
+            do http.download(@@(attributes,"src"),dest)
+            attributes<"src">:path.concat(@relative_img_folder,file.name(@@(attributes,"src")))
+        }
+    }
+    
+    #!
+    websencia.renderView:: &input, &view
+    {
+        if isnull(view) { do rise_error(-99,"View model can't be null") }
+        
+        do @context.begin(input)
+
+        if @@(view,"styles")!="" && not(@no_styles)
+        {
+            if not(@no_dynamic)
+            {
+                ##
+                style{$"#<ftext(@@(view,'styles'))>"}
+                ##
+            }
+            else
+            {
+                ##
+                style{$"#<@@(view,'styles')>"}
+                ##
+            }
+        }
+        
+        do _renderView(input,view)
+
+        if @@(view,"jscode")!="" && not(@no_script)
+        {
+            if not(@no_dynamic)
+            {
+                ##
+                script{$"#<ftext(@@(view,'jscode'))>"}
+                ##
+            }
+            else
+            {
+                ##
+                script{$"#<@@(view,'jscode')>"}
+                ##
+            }
+        }
+
+        do @context.end()
+
+
+    }
+
+    #!
+    websencia.loadViewModels::filename
+    {
+        fullpath=filename
+
+        if isset("@http_context") && not(file.exists(fullpath))
+        {
+            fullpath=path.concat( dir.name(field.dstr(@http_context,"request/headers/PATH_TRANSLATED","")), filename)
+        }
+
+        if not(file.exists(fullpath)) { do rise_error(-99,"View models file not found") }
+
+        return from.json(file.rtext(fullpath))
+    }
+
+    #!
+    @foreach::&data
+    {
+        for i=0;i<@count(data)
+        {
+            ref components=@@(@DynamicContext,"&element/components")
+            ref view=@@(@DynamicContext,"&view")
+            ref input=@@(@DynamicContext,"&input")
+            if not(isnull(components))
+            {
+                do @context.begin(@item(data,i))
+                do __iteraComponents(input, view,components, "")
+                exception{}
+                do @context.end()
+            }
+        }
+    }
+
+    #!
+    @if::value
+    {
+        if value
+        {
+            ref components=@@(@DynamicContext,"&element/components")
+            ref view=@@(@DynamicContext,"&view")
+            ref input=@@(@DynamicContext,"&input")
+
+            if not(isnull(components))
+            {
+                do __iteraComponents(input, view,components, "")
+                exception{}
+            }
+        }
+    }
+
+    #!
+    _renderView::&input, &view
+    {
+        do __iteraComponents(input, view, field.dobj(view,"components",@null), field.dstr(view,"content",""))
+    }
+
+    #!
+    __attString::&att
+    {
+        if isnull(att) {return ""}
+        ref l=list.create_from_fields(att)
+        cad=""
+        for i=0;i<list.count(l)-1
+        {
+            cad=cad+list.str(l,i)+" = " +'"' +field.dstr(att,list.str(l,i),"")+'" '
+        }
+
+        return trim(cad)
+    }
+
+    #!
+    __getClassNameFromList::&l,i
+    {
+        return field.str(list.obj(l,i),"name")
+        exception{}
+        return list.str(l,i)
+    }
+
+    #!
+    __class_list::&l
+    {
+        if isnull(l) { return ""}
+
+        cad=""
+
+        for i=0;i<list.count(l)
+        {
+            cad=cad+__getClassNameFromList(l,i)+" "
+        }
+
+        return trim(cad)
+    }
+
+    #!
+    __genAttributes:: &attributes, &classes
+    {
+        if isnull(attributes){ ref attributes=record.create()}
+
+        new keyvalue
+        {
+            @"key":""
+            @"value":""
+        }
+
+        str_classes=__class_list(classes)
+        if (str_classes!=""){ attributes<"class">:str_classes }
+
+        str_attributes=__attString(attributes)
+
+        ref l=list.create_from_fields(attributes)
+
+        if list.count(l)>0
+        {
+            str_attributes=str_attributes + " " + list.str(l,list.count(l)-1)
+            keyvalue<"key">:str_attributes
+            keyvalue<"value">:field.str(attributes,list.str(l,list.count(l)-1))
+        }
+        
+        return keyvalue
+    }
+   
+    #!
+    _renderHtmlElement::&input,&view, &component
+    {
+        ref components=field.dobj(component,"components",@null)
+        ref attributes=field.dobj(component,"attributes",@null)
+        ref classes=field.dobj(component,"classes",@null)
+
+        if isnull(attributes){ref attributes=record.create()}
+
+        if trim(field.dstr(attributes,@dynamic_attribute,""))!=""
+        {
+            do _renderDynamicElement(input, view, component)
+            return
+        }
+
+        tagName=trim(field.dstr(component, "tagName",field.dstr(component,"type",@default_tagName)))
+
+        if tolower(tagName)=="comment" || tolower(tagName)=="null" || tagName=="" { return }
+
+        if tagName=="textnode" { tagName="span"}
+
+        //
+        if tolower(tagName)=="img"
+        {
+            do downloadImages(attributes)
+        }
+        //
+        
+        ref att_keyvalue=__genAttributes(attributes,classes)
+
+        //Reemplazar marcado de Devkron en el contexto
+        if not(@no_dynamic)
+        {
+            att_keyvalue<"key">:ftext(field.str(att_keyvalue,"key"))
+            att_keyvalue<"value">:ftext(field.str(att_keyvalue,"value"))
+            content=ftext(field.dstr(component,"content",""))
+        }
+        else
+        {
+            att_keyvalue<"key">:field.str(att_keyvalue,"key")
+            att_keyvalue<"value">:field.str(att_keyvalue,"value")
+            content=field.dstr(component,"content","")
+        }
+        /////////////////////////////////////////////////////////////
+        
+        if parse.bool(field.dstr(component,"void","false"))
+        { 
+            ##
+            "#<tagName>"("#<field.str(att_keyvalue,'key')>"="#<field.str(att_keyvalue,'value')>"){}
+            ##
+            return
+        }
+
+        ##
+        "#<tagName>"("#<field.str(att_keyvalue,'key')>"="#<field.str(att_keyvalue,'value')>")
+        {
+            ##
+            content=__iteraComponents(input, view, components,content)
+            ##
+            $"#<content>"     
+        }
+        ##
+        
+    }
+
+    #!
+    __iteraComponents::&input, &view, &components, content
+    {
+        for i=0;i<list.count(components)
+        {
+            ref cmp=list.obj(components,i)
+            
+            tag=trim(field.dstr(cmp, "tagName",field.dstr(cmp,"type",@default_tagName)))
+            if tolower(tag)!="comment" && tolower(tag)!="null" && tag!=""
+            {
+                if tag!="textnode"
+                {
+                    do _renderHtmlElement(input,view,cmp)
+                }
+                else
+                {
+                    content=content+field.dstr(cmp,"content","")
+                }
+            }
+        }
+        if not(@no_dynamic) 
+        {
+            return ftext(content)
+        }
+        else
+        {
+            return content
+        }
+    }
+
+    #!
+    __replace_atts::&atts, cad
+    {
+        ref l=list.create_from_fields(atts)
+        
+        for i=0;i<list.count(l)
+        {
+            cad=replace(cad, "@"+list.str(l,i),field.str(atts,list.str(l,i)))
+        }
+
+        return cad
+    }
+
+    #!
+    __add_attribute::&atts,dklmember,&rec,fname,fvalue
+    {
+        
+        nf=""
+
+        if isanyword(fname,@dkl_att_reserved) { return }
+
+        if findstr(fname,@dkl_att_prefix)==0
+        {
+            nf=path.concat(dklmember,replace(fname,@dkl_att_prefix,""))
+        }
+        else
+        {
+            nf=path.concat(dklmember,fname)
+        }
+
+        nf=replace(__replace_atts(atts,nf),"/","~")
+        nf=replace(__replace_atts(atts,nf),"*","¨")
+
+        if contains(nf,"@id"){nf=replace(nf,"@id","id_"+uuid()) }
+        
+        rec<nf>:fvalue
+
+    }
+
+    #!
+    __extractViewModel::&rec, &component, required
+    {
+        ref atts=field.dobj(component,"attributes",@null)
+        cls= __class_list(field.dobj(component,"classes",@null))
+
+        if isnull(atts) { ref atts=record.create()}
+
+        if cls!=""{ atts<"class">:cls}
+
+        ref flds=list.create_from_fields(atts)
+
+        dklmember=field.dstr(atts,@member_attribute,"")
+        dklatts=field.dstr(atts,@attlist_attribute,"")
+
+        if dklatts=="*" { dklatts="" }
+
+        if dklmember!="" || required
+        {
+            for i=0;i<list.count(flds)
+            {
+                fvalue=field.str(atts,list.str(flds,i))
+                fname=list.str(flds,i)
+
+                if fvalue==@innerComponentsMark 
+                { 
+                    fvalue=to.json(field.dobj(component,"components",@null))
+                    fname=fname+"*"
+                }
+
+                if dklatts==""
+                {
+                    do __add_attribute(atts,dklmember,rec,fname,fvalue)
+                }
+                else
+                {
+                    if isanyword(list.str(flds,i),replace(dklatts," ",""))
+                    {
+                        do __add_attribute(atts,dklmember,rec,fname,fvalue)
+                    }
+                }
+            }
+        }
+
+        ref components=field.dobj(component,"components",@null)
+
+        if not(isnull(components))
+        {
+            for i=0; i<list.count(components)
+            {
+                do __extractViewModel(rec, list.obj(components,i),@false)
+            }
+        }
+
+    }
+
+    #!
+    __genFieldRoute::cad
+    {
+        // Devuelve una lista con las parte de la ruta del miembro (omitiendo el último)
+        // Se basa en el caracter ~ como delimitador de las partes
+
+        ref lt=split(cad,"~")
+        ref lf=list.create()
+
+        for i=0;i<list.count(lt)-1
+        {
+            do list.add(lf,list.str(lt,i))
+        }
+
+        return lf
+
+    }
+
+    #!
+    __getFieldMember::cad
+    {
+        //Devuelve el nombre del miembro en una lista de partes delimitadas por ~
+        if trim(cad)=="" { return "" }
+        ref lt=split(cad,"~")
+        return list.str(lt,list.count(lt)-1)
+    }
+
+    #!
+    __getFieldRoute::&route
+    {
+        //Devuelve una cadena de ruta de miembro con base en una lista de partes
+        r=""
+        for i=0;i<list.count(route)
+        {
+            if r=="" { r=list.str(route,i) }
+            else { r=r+"/"+ list.str(route,i) }
+        }
+
+        return r
+    }
+
+    #!
+    __createComponentModel::&rec,&input, &view, &element
+    {
+        //El caracter ¨ representa al * para la generación de los miembros
+
+        ref lc=list.create_from_fields(rec)
+        new obj { }
+        for i=0;i<list.count(lc)
+        {
+            ref froute=__genFieldRoute(list.str(lc,i))
+            fmember=__getFieldMember(list.str(lc,i))
+            fullmember=""
+            ref obj_member= obj
+            //Asegurarse que existan todos los miembros de la ruta
+            for j=0;j<list.count(froute)
+            {
+                if not(field.exist(obj_member,list.str(froute,j)))
+                {
+                    obj_member<list.str(froute,j)+"*">:record.create()
+                }
+                else
+                {
+                    if field.typeof(obj_member,list.str(froute,j))!=3
+                    {
+                        obj_member<list.str(froute,j)+"*">:record.create()
+                    }
+
+                    if isnull(field.obj(obj_member,list.str(froute,j))) { obj_member<list.str(froute,j)+"*">:record.create() }
+                }
+
+                ref obj_member=field.obj(obj_member,list.str(froute,j))
+            }
+
+            fullmember=replace(path.concat(__getFieldRoute(froute),fmember),"¨","*")
+
+            if findstr(fullmember,"*")==length(fullmember)-1
+            {
+                obj<fullmember>:from.json(field.str(rec, list.str(lc,i)))
+            }
+            else
+            {
+                if not(@no_dynamic)
+                {
+                    obj<fullmember>:ftext(field.str(rec, list.str(lc,i)))
+                }
+                else
+                {
+                    obj<fullmember>:field.str(rec, list.str(lc,i))
+                }
+            }
+
+            exception { /*Anular cualquier error en la generación de un miembro*/}
+        }
+
+        return obj
+    }
+
+    #!
+    _renderDynamicElement::&input,&view, &element
+    {
+        if @no_dynamic { return }
+        new __componentModelMembers { }
+
+        do __extractViewModel(__componentModelMembers, element,@true)
+
+        ref component=__createComponentModel(__componentModelMembers, input, view, element)
+        if isset("@DynamicContext") { ref cur_dyncontext=@DynamicContext }
+
+        using @DynamicContext
+        {
+            @"component*":component
+            @"view*":view
+            @"element*":element
+            @"input*":input
+        }
+
+        do eval(field.str(element,"attributes/"+@dynamic_attribute))
+        
+        if isset("cur_dyncontext") { ref @DynamicContext=cur_dyncontext }
+    }
+}

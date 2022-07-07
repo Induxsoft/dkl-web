@@ -1,0 +1,16 @@
+#include "dkli.dkh"
+
+#$
+div 
+{
+	##
+
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+	##
+
+	h1{"List"}
+	pre{code{$"#<to.json(@crud_context)>"} }
+
+}

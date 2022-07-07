@@ -1,0 +1,16 @@
+#include "dkli.dkh"
+
+#$
+div 
+{
+	##
+
+	#include "functions.dkh"
+	#include "serialize.dkh"
+
+	##
+
+	h1{"Error"}
+	pre{code{$"#<@@(@crud_context,'error/message')>"} }
+
+}

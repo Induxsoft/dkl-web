@@ -1,0 +1,157 @@
+﻿#include "dkli.dkh"
+#!
+
+module "crudl.dkl"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "dbr.dkh"
+
+	#include "entity.dk"
+	#include "view.dk"
+
+	#!
+
+	get_payload::
+	{
+		ref post=@@(@http_context,"&request/post")
+
+		if not(isnull(post))
+		{
+			if list.create_from_fields(post)>0
+			{
+				return post
+			}
+		}
+
+		return from.json(field.dstr(@http_context,"request/post_string","null"))
+
+		exception{}
+
+		return @null
+	}
+	@base_path = "core-apps/db-crudl"
+	@crud_path= path.concat("web/api.erp.test", @base_path) //Ubicación de los archivos de modelo de entidades
+	@auto_crud=@true
+
+	@list_view="list.dk"
+	@form_view="form.dk"
+	@error_view="error.dk"
+
+	@entity_id_blank="_new"
+
+	@dkl_view_ext=".dk"
+	@websencia_ext=".jsnwm"
+
+	ref params = @@(@http_context,"&request/get")
+	ref input_data = get_payload()
+	ref output_data=@null
+	ref db=@null
+
+	http_method=toupper(@@(@http_context,"request/headers/request_method"))
+
+	@expected_html=contains(tolower(replace(@@(@http_context,"request/headers/HTTP_ACCEPT")," ","")),"text/html")
+	@entity_path=path.concat(@crud_path, @@(@http_context,"request/get/_entities_type"))
+	qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
+
+	model_entity = path.concat(@entity_path,"model.dk")
+	controller_entity = path.concat(@entity_path,"controller.dk")
+	
+	if file.exists(model_entity) { include model_entity }
+	else { if not(@auto_crud) { do rise_error(404,"Entidad no definida") }}
+
+	
+
+	if file.exists(controller_entity) { include controller_entity }
+
+	if @expected_html
+	{
+		//Buscar archivos de vistas
+		@form_view=parse_view_file(@form_view)
+		if @form_view=="" { do rise_error(500,"Vista de formulario no disponible")}
+
+		@list_view=parse_view_file(@list_view)
+		if @list_view=="" { do rise_error(500,"Vista de lista no disponible")}
+
+		@error_view=parse_view_file(@error_view)
+		if @error_view=="" { do rise_error(500,"Vista de error no disponible")}
+
+		//Si el método es POST, pero se requiere HTML y no es una entidad nueva, entonces asumir que es PATCH
+		if @@(params,"_entity_id")!=@entity_id_blank && @@(params,"_entity_id")!="" && http_method=="POST" { http_method="PATCH" }
+	}
+
+	ref db=@@(@http_context,"&session/idp/database") //dbr.login(qname,"ADMIN","")
+	//do rise_error(8,to.json(@http_context))
+	ref @database=db
+	operation=""
+
+	switch http_method
+	{
+		case "GET"
+		{
+			if @@(params,"_entity_id") != "" { operation="read" }
+			else { operation="list" }
+		}
+		case "POST" { operation="create" }
+		case "PUT"  { operation="update" }
+		case "PATCH"{ operation="update" }
+		case "DELETE" { operation="delete" }
+	}
+
+	that @view_controller(operation, params)
+
+	switch operation
+	{
+		case "read"
+		{
+			if @@(params,"_entity_id")==@entity_id_blank
+			{
+				if isnull(@blank) { do rise_error(404,"Operación no admitida (nuevo)") }
+				that @blank(db,params) ->* output_data
+			}
+			else
+			{
+				if isnull(@read) { do rise_error(404,"Operación no admitida") }
+				that @read(db,params)->*output_data
+			}
+		}
+		case "list"
+		{
+			if isnull(@list) { do rise_error(404,"Operación no admitida") }
+			that @list(db,params)->*output_data
+		}
+		case "create"
+		{
+			if isnull(@create) { do rise_error(404,"Operación no admitida") }
+			that @create(db,params,input_data)->*output_data
+		}
+		case "update"
+		{
+			if isnull(@update) { do rise_error(404,"Operación no admitida") }
+			that @update(db,params,input_data)->*output_data
+		}
+		case "delete"
+		{
+			if isnull(@delete) { do rise_error(404,"Operación no admitida") }
+			do set_http_status(204)
+			that @delete(db,params)
+		}
+	}
+
+	that @success_view(params, input_data, output_data, @null)
+
+	
+	exception
+	{
+		if last_error_code()>=400 { do set_http_status(last_error_code()) }
+		else { do set_http_status(500) }
+
+		new error_info
+		{
+			@"message":last_error()
+		}
+
+		that @fail_view(params, input_data, output_data, error_info)
+	}
+	
+}

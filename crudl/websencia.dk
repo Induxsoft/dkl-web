@@ -1,0 +1,25 @@
+﻿#include "dkli.dkh"
+#set "meta-xml-declaration" ""
+#!
+program "Websencia Render"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+    #include "dbr.dkh"
+    
+    #include "websencia.dkl"
+
+    #!
+    build_view::
+    {
+        ref views=websencia.loadViewModels(@@(@crud_context,"$_websencia_file"))
+        ref view=@@(views, "&views/"+@@(@crud_context,"$_websencia_view"))
+        return fxml(websencia.renderView(@crud_context, view))
+    }
+
+    ##    
+    div{$"#<build_view()>"}
+    
+}
+
+			

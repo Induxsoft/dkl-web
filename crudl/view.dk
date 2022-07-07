@@ -1,0 +1,255 @@
+﻿#include "dkli.dkh"
+#!
+
+module "view.dkl"
+{
+	#!
+	parse_view_file::file
+	{
+		if contains(file,"$")
+		{
+			//Notación de vista en archivo de Websencia
+			fn=list.str(split(file,"$"),0)
+			vn=list.str(split(file,"$"),1)
+
+			if file.extension(fn)=="" { fn=fn+@websencia_ext }
+			if file.exists(path.concat(@entity_path,fn))
+			{
+				return path.concat(@entity_path,fn)+"$"+vn
+			}
+			if file.exists(path.concat(@crud_path,fn))
+			{
+				return path.concat(@crud_path,fn)+"$"+vn
+			}
+
+			return ""
+		}
+		
+		if file.extension(file)=="" { file=file+@dkl_view_ext }
+		if file.exists(path.concat(@entity_path,file))
+		{
+			return path.concat(@entity_path,file)
+		}
+		if file.exists(path.concat(@crud_path,file))
+		{
+			return path.concat(@crud_path,file)
+		}
+
+		return ""
+
+		exception { return last_error()}
+	}
+	
+	#!
+	view_controller::operation, &params
+	{
+		params<"_operation">:operation
+
+		if @expected_html
+		{
+			point @fail_view to error_view
+
+			switch operation
+			{
+				case "list" { point @success_view to list_view }
+				case "read" { point @success_view to form_view }
+				case "create" 
+				{ 
+					if @@(params,"_redirect")=="disabled"
+					{ point @success_view to form_view }
+					else { point @success_view to redirect }
+
+					point @fail_view to form_view
+				}
+				case "update" 
+				{ 
+					if @@(params,"_redirect")=="disabled"
+					{ point @success_view to form_view }
+					else { point @success_view to redirect }
+
+					point @fail_view to form_view
+				}
+				case "delete" 
+				{ 
+					if @@(params,"_redirect")=="disabled"
+					{ point @success_view to form_view }
+					else { point @success_view to redirect }
+				}
+			}
+		}
+	}
+
+	@url_redir=""
+
+	parse_redir::&params, &input_data, &output_data, &error_info
+	{
+		@keyfield=entity.safe_id(field.dstr(params,"_key",@keyfield))
+        if @table_name=="" { @table_name=entity.safe_id(@@(params,"_entities_type")) }
+
+		ref db=@null
+		if isset("@database") { ref db=@database }
+
+		new context
+		{
+			@".*": output_data
+			@"output*": output_data
+			@"input*": input_data
+			@"parameters*": params
+			@"error*": error_info
+			@"database*": db
+			@"http*":@http_context
+		}
+
+		do @context.begin(context)
+		return ftext(@url_redir)
+		do @context.end()
+
+		exception{return ""}
+	}
+
+	#!
+	redirect :: &params, &input_data, &output_data, &error_info
+	{
+		if @url_redir!=""
+		{
+			@http_context<"response/headers/Location">: parse_redir(params, input_data, output_data, error_info)
+			return
+		}
+		
+		@keyfield=entity.safe_id(field.dstr(params,"_key",@keyfield))
+        if @table_name=="" { @table_name=entity.safe_id(@@(params,"_entities_type")) }
+
+		uri=list.str(split(@@(@http_context,"request/headers/REQUEST_URI"),"?"),0)
+		//do rise_error(0,uri)
+		if uri!="" 
+		{ 
+			if substring(uri,length(uri)-1,1)=="/" { uri=substring(uri,0,length(uri)-1)}
+		}
+		
+		//do rise_error(0,uri)
+		if @@(params,"$_entity_id")!="" { uri=dir.name(uri) }
+
+		uri=replace(path.concat(uri,"?_select="+@@(output_data,"$"+@keyfield)+"&_key="+@keyfield),"\\","/")
+
+		@http_context<"response/headers/Location">:uri
+	}
+
+	render_view::file,&params, &input_data, &output_data, &error_info
+	{
+		html=""
+		ref db=@null
+		if isset("@database") { ref db=@database }
+
+		new context
+		{
+			@".*": output_data
+			@"output*": output_data
+			@"input*": input_data
+			@"parameters*": params
+			@"error*": error_info
+			@"database*": db
+			@"http*":@http_context
+		}
+
+		if not(isnull(error_info))
+		{
+			if not(isnull(input_data)) { context<".*">:input_data }
+		}
+
+
+		if contains(file,"$")
+		{
+			fn=list.str(split(file,"$"),0)
+			vn=list.str(split(file,"$"),1)
+			context<"_websencia_file">:fn
+			context<"_websencia_view">:vn
+
+			html=runscript(path.concat(@crud_path,"websencia.dk"),"crud_context",context)
+		}
+		else
+		{
+			ext=tolower(file.extension(file))
+			ext=ifstr(ext==".dkl",".dk",ext)
+
+			switch ext
+			{
+				case ".dk"
+				{
+					//do rise_error(888, to.json(context))
+					html=runscript(file,"crud_context",context)
+				}
+				default
+				{
+					do @context.begin(context)
+					
+					html=ftext(file.rtext(file))
+
+					do @context.end()
+				}
+			}
+		}
+
+		@http_context<"response/headers/content-type">:"text/html;charset=utf-8"
+    	@http_context<"response/output">:"text"
+		@http_context<"response/text">: html
+	}
+
+	#!
+	error_view:: &params, &input_data, &output_data, &error_info
+	{
+		do render_view(@error_view,params, input_data, output_data,error_info)
+	}
+
+	#!
+	list_view:: &params, &input_data, &output_data, &error_info
+	{
+		do render_view(@list_view,params, input_data, output_data,error_info)
+	}
+
+	#!
+	flush_stdout::
+	{
+		@http_context<"response/headers/content-type">:"text/html;charset=utf-8"
+    	@http_context<"response/output">:"text"
+
+		@http_context<"response/text">:  fxml()
+	}
+
+	#!
+	form_view:: &params, &input_data, &output_data, &error_info
+	{
+		do render_view(@form_view,params, input_data, output_data,error_info)
+	}
+
+	#!
+	json_view:: &params, &input_data, &output_data, &error_info
+	{
+		@http_context<"response/headers/content-type">:"application/json;charset=utf-8"
+    	@http_context<"response/output">:"text"
+
+		if isnull(error_info)
+		{
+			@http_context<"response/text">:to.json(output_data)
+		}
+		else
+		{
+			@http_context<"response/text">:to.json(error_info)
+		}
+	}
+
+	#!
+	set_http_status:: status
+	{
+		@http_context<"response/headers/status">:status
+	}
+
+	#!
+	ref @success_view=@null
+	ref @fail_view=@null
+	ref @view_controller=@null
+
+	point @success_view to json_view
+	point @fail_view to json_view
+	point @view_controller to view_controller
+
+}
