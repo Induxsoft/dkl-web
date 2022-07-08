@@ -1,0 +1,24 @@
+﻿#include "dkli.dkh"
+#!
+
+module "Controller configs"
+{
+	@base_path = "/"
+	
+	@auto_crud=@true
+
+	@list_view="list.dk"
+	@form_view="form.dk"
+	@error_view="error.dk"
+
+	@entity_id_blank="_new"
+
+	@dkl_view_ext=".dk"
+	@websencia_ext=".jsnwm"
+
+    @crudl.qname=""
+    @crudl.user=""
+    @crudl.pwd=""
+
+    @crudl.enable_idreplacement=@true
+}

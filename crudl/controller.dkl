@@ -1,12 +1,13 @@
 ﻿#include "dkli.dkh"
 #!
 
-module "crudl.dkl"
+module "Controller"
 {
 	#include "functions.dkh"
 	#include "serialize.dkh"
 	#include "dbr.dkh"
 
+	#include "config.dk"
 	#include "entity.dk"
 	#include "view.dk"
 
@@ -30,18 +31,6 @@ module "crudl.dkl"
 
 		return @null
 	}
-	@base_path = "core-apps/db-crudl"
-	@crud_path= path.concat("web/api.erp.test", @base_path) //Ubicación de los archivos de modelo de entidades
-	@auto_crud=@true
-
-	@list_view="list.dk"
-	@form_view="form.dk"
-	@error_view="error.dk"
-
-	@entity_id_blank="_new"
-
-	@dkl_view_ext=".dk"
-	@websencia_ext=".jsnwm"
 
 	ref params = @@(@http_context,"&request/get")
 	ref input_data = get_payload()
@@ -52,15 +41,19 @@ module "crudl.dkl"
 
 	@expected_html=contains(tolower(replace(@@(@http_context,"request/headers/HTTP_ACCEPT")," ","")),"text/html")
 	@entity_path=path.concat(@crud_path, @@(@http_context,"request/get/_entities_type"))
-	qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
+
+	qname=""
+
+	if @@(@http_context,"request/get/_connection")!="" && @@(@http_context,"request/get/_app_group")!="" 
+	{
+		qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
+	}
 
 	model_entity = path.concat(@entity_path,"model.dk")
 	controller_entity = path.concat(@entity_path,"controller.dk")
 	
 	if file.exists(model_entity) { include model_entity }
 	else { if not(@auto_crud) { do rise_error(404,"Entidad no definida") }}
-
-	
 
 	if file.exists(controller_entity) { include controller_entity }
 
@@ -80,8 +73,21 @@ module "crudl.dkl"
 		if @@(params,"_entity_id")!=@entity_id_blank && @@(params,"_entity_id")!="" && http_method=="POST" { http_method="PATCH" }
 	}
 
-	ref db=@@(@http_context,"&session/idp/database") //dbr.login(qname,"ADMIN","")
-	//do rise_error(8,to.json(@http_context))
+	ref db=@@(@http_context,"&session/idp/database") 
+	if isnull(db)
+	{
+		if qname=="" { qname=@crudl.qname }
+
+		if @@(@http_context,"$session/user/ids")!="" && @crudl.enable_idreplacement
+		{
+			ref db=dbr.alter_id(qname,@@(@http_context,"$session/user/uid"),@@(@http_context,"$session/user/name"),@@(@http_context,"$session/user/ids"))
+		}
+		else
+		{
+			ref db=dbr.login(qname, @crudl.user,@crudl.pwd)
+		}
+	}
+
 	ref @database=db
 	operation=""
 
