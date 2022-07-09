@@ -21,4 +21,9 @@ module "Controller configs"
     @crudl.pwd=""
 
     @crudl.enable_idreplacement=@true
+
+	@crudl.access_privilege='
+	{
+		"access":[{"workspace":""}]
+	}'
 }
