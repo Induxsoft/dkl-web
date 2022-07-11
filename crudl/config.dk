@@ -3,7 +3,7 @@
 
 module "Controller configs"
 {
-	@base_path = "/"
+	@crud_path = "/"
 	
 	@auto_crud=@true
 

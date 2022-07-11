@@ -34,7 +34,7 @@ module "Controller"
 
 	dbr.check_alter_access::&user
 	{
-		ref manifiesto=from.json(@access_privilege)
+		ref manifiesto=from.json(@crudl.access_privilege)
 
 		ref privs=auth.checkPrivs(user, manifiesto)
 
