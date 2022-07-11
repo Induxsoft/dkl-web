@@ -5,6 +5,7 @@ module "Controller"
 {
 	#include "functions.dkh"
 	#include "serialize.dkh"
+	#include "webauth.dkl"
 	#include "dbr.dkh"
 	
 	#include "config.dk"
