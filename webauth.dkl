@@ -30,7 +30,7 @@ module "authorization"
                         ref keys=split(value,",")
                         for j=0;j<@count(keys)
                         {
-                            if trim(@@(@http_context,"request/get/"+list.str(keys,j))) !="" { return trim(@@(@http_context,"request/get/"+list.str(keys,j))) }
+                            if trim(@@(@http_context,"request/get/"+list.str(keys,j))) !="" { return replace(trim(@@(@http_context,"request/get/"+list.str(keys,j))),"'","") }
                         }
                     }
                 }
@@ -41,7 +41,7 @@ module "authorization"
                         ref keys=split(value,",")
                         for j=0;j<@count(keys)
                         {
-                            if trim(cookie.get(list.str(keys,j)))!="" { return trim(cookie.get(list.str(keys,j))) }
+                            if trim(cookie.get(list.str(keys,j)))!="" { return replace(trim(cookie.get(list.str(keys,j))),"'","") }
                         }
                     }
                 }
@@ -52,7 +52,7 @@ module "authorization"
                         ref keys=split(value,",")
                         for j=0;j<@count(keys)
                         {
-                            if trim(@@(@http_context,"request/post/"+list.str(keys,j))) !="" { return trim(@@(@http_context,"request/post/"+list.str(keys,j))) }
+                            if trim(@@(@http_context,"request/post/"+list.str(keys,j))) !="" { return replace(trim(@@(@http_context,"request/post/"+list.str(keys,j))),"'","") }
                         }
                     }
                 }
@@ -65,7 +65,7 @@ module "authorization"
                         ref keys=split(value,",")
                         for j=0;j<@count(keys)
                         {
-                            if trim(@@(obj,list.str(keys,j))) !="" { return trim(obj,list.str(keys,j))) }
+                            if trim(@@(obj,list.str(keys,j))) !="" { return replace(trim(obj,list.str(keys,j)),"'","") }
                         }
                         exception{}
                     }
@@ -84,7 +84,7 @@ module "authorization"
                             {
                                 if tolower(list.str(keys,0))=="bearer"
                                 {
-                                    return list.str(keys,1) 
+                                    return replace(list.str(keys,1) ,"'","")
                                 }
                             }
                         }
@@ -97,7 +97,7 @@ module "authorization"
                     {
                         ba=trim(replace(field.dstr(@http_context,"request/headers/HTTP_AUTHORIZATION",field.dstr(@http_context,"request/headers/Authorization","")),"\t"," "))
                         
-                        if ba!="" { return ba }
+                        if ba!="" { return replace(ba,"'","") }
                     }
                 }
                 case "header"
@@ -108,7 +108,7 @@ module "authorization"
                         for j=0;j<@count(keys)
                         {
                             ba=trim(field.dstr(@http_context,"request/headers/http_"+list.str(keys,j),field.dstr(@http_context,"request/headers/"+list.str(keys,j),"")))
-                            if ba !="" { return ba }
+                            if ba !="" { return replace(ba,"'","") }
                         }
                     }
                 }
