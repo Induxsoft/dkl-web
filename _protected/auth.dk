@@ -45,11 +45,11 @@ program
 	ref read_privs=@@(res_info,"&privileges/"+@privid_read)
 	if isnull(read_privs) { return }
 
-	if isnull(@@(@http_context,"&session/user")) { do rise_error(0,"Debe iniciar sesión")}
+	if isnull(@@(@http_context,"&session/user")) { do rise_error(401,"Debe iniciar sesión (Unauthorized)")}
 
 	//Verificar el permiso de lectura
 	
-	if not(auth.findStrInList(privs, @privid_read))	{ do rise_error(0,"No autorizado") }
+	if not(auth.findStrInList(privs, @privid_read))	{ do rise_error(403,"No autorizado (Forbidden)") }
 	
 
 }
