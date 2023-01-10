@@ -1,0 +1,54 @@
+#include "dkli.dkh"
+#!
+
+program
+{
+
+	dbr.check_alter_access::&user
+	{
+		ref manifiesto=from.json(@crudl.access_privilege)
+
+		ref privs=auth.checkPrivs(user, manifiesto)
+
+		return @count(privs)>0
+	}
+
+	dbr.alter_id::qname, uid,uname, ids
+	{
+		// conectar con open
+		ref db = dbr.open(qname)
+		// verificar si en tuser existe uid y si no existe insertarlo, con userid=uid, username=uname, pwd=uuid() (recuperas su sys_pk porque te va a servir para insertar la sesion (sys_session.iuser))
+		new params
+		{
+			@"userid":uid
+			@"username":uname
+			@"pwd":uuid()
+			@"sys_guid":uuid()
+		}
+		sys_pk_user = dbr.num(db, "Select sys_pk from tuser where userid=@userid", params)
+		
+		if not(sys_pk_user)
+		{
+			do dbr.execute(db, "insert into tuser(sys_timestamp,sys_guid,username,pwd,pwdmd5,userid) values(now(), @sys_guid,@username,@pwd,@pwd, @userid)", params)
+			sys_pk_user = dbr.num(db, "Select sys_pk from tuser where userid=@userid;", params)
+			
+		}
+		// verificar si en sys_session existe el ids, si no insertar una fila en sys_session (una sesión cerrada es sys_deleted=1)
+		new p
+		{
+			@"sys_pk_user":sys_pk_user
+			@"sys_guid":ids
+		}
+
+		ids_u = dbr.str(db, "select ss.sys_guid from sys_session ss where ss.sys_guid=@sys_guid and not ifnull(ss.sys_deleted,0);", p)
+
+		if ids_u == ""
+		{
+			do dbr.execute(db, "insert into sys_session(sys_timestamp,sys_dtcreated,sys_guid,sys_deleted,iuser, sys_recver,clientinfo) values(now(),now(), @sys_guid,0,@sys_pk_user,0,'Unknow')", p)
+		}
+
+		do dbr.close(db)
+
+		return dbr.reconnect(qname, ids)
+	}
+}

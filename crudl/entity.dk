@@ -73,9 +73,8 @@ module "Entity.dk"
 
         
         if @use_transaction { do dbr.begin(db) }
-
+            // do rise_error(99,to.json(create_data))
         ref master=dbr.save(db,@table_name,create_data)
-        //  do rise_error(-99,to.json(data))
         if not(isnull(@childs))
         {
             ref fields=list.create_from_fields(@childs)

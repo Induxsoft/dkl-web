@@ -35,6 +35,12 @@ module "view.dkl"
 			return path.concat(@crud_path,file)
 		}
 
+		if file.exists(path.concat(@dbmvc_path,file))
+		{
+			return path.concat(@dbmvc_path,file)
+		}
+
+
 		return ""
 
 		exception { return last_error()}
@@ -175,8 +181,13 @@ module "view.dkl"
 			{
 				case ".dk"
 				{
-					//do rise_error(888, to.json(context))
+					// do rise_error(888, file)
 					html=runscript(file,"crud_context",context)
+					if file.exists(@path_template_protected) && not(isnull(error_info)){
+						// #include "web/r8-catalogs.ws.induxsoft.net/_protected/default.dk"//@path_template_protected
+						  @http_context<"response/text">:html
+						  html=ftext(file.rtext(@path_template_protected))	
+					}
 				}
 				default
 				{

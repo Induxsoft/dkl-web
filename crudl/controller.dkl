@@ -1,16 +1,21 @@
 ﻿#include "dkli.dkh"
 #!
 
-module "Controller"
+module "crudl.dkl"
 {
-	#include "functions.dkh"
-	#include "serialize.dkh"
-	#include "webauth.dkl"
-	#include "dbr.dkh"
-	
-	#include "config.dk"
 	#include "entity.dk"
 	#include "view.dk"
+	#include "webauth.dkl"
+	
+	#!
+	switch @db_engine
+	{
+		case "MY_SQL"
+		{
+			include "crudl/mysql.dbr.dkh"
+		}
+	}
+	do _map_function(@lib_dbr,"induxsoft.Connections.Manager","ResetStorage","reset","void","void")
 
 	#!
 
@@ -32,54 +37,9 @@ module "Controller"
 
 		return @null
 	}
-
-	dbr.check_alter_access::&user
-	{
-		ref manifiesto=from.json(@crudl.access_privilege)
-
-		ref privs=auth.checkPrivs(user, manifiesto)
-
-		return @count(privs)>0
-	}
-
-	dbr.alter_id::qname, uid,uname, ids
-	{
-		// conectar con open
-		ref db = dbr.open(qname)
-		// verificar si en tuser existe uid y si no existe insertarlo, con userid=uid, username=uname, pwd=uuid() (recuperas su sys_pk porque te va a servir para insertar la sesion (sys_session.iuser))
-		new params
-		{
-			@"userid":uid
-			@"username":uname
-			@"pwd":uuid()
-			@"sys_guid":uuid()
-		}
-		sys_pk_user = dbr.num(db, "Select sys_pk from tuser where userid=@userid", params)
-		
-		if not(sys_pk_user)
-		{
-			do dbr.execute(db, "insert into tuser(sys_timestamp,sys_guid,username,pwd,pwdmd5,userid) values(now(), @sys_guid,@username,@pwd,@pwd, @userid)", params)
-			sys_pk_user = dbr.num(db, "Select sys_pk from tuser where userid=@userid;", params)
-			
-		}
-		// verificar si en sys_session existe el ids, si no insertar una fila en sys_session (una sesión cerrada es sys_deleted=1)
-		new p
-		{
-			@"sys_pk_user":sys_pk_user
-			@"sys_guid":ids
-		}
-
-		ids_u = dbr.str(db, "select ss.sys_guid from sys_session ss where ss.sys_guid=@sys_guid and not ifnull(ss.sys_deleted,0);", p)
-
-		if ids_u == ""
-		{
-			do dbr.execute(db, "insert into sys_session(sys_timestamp,sys_dtcreated,sys_guid,sys_deleted,iuser, sys_recver,clientinfo) values(now(),now(), @sys_guid,0,@sys_pk_user,0,'Unknow')", p)
-		}
-
-		do dbr.close(db)
-
-		return dbr.reconnect(qname, ids)
-	}
+	
+	@crud_path= path.concat(@path_root, @base_path) //Ubicación de los archivos de modelo de entidades
+	@auto_crud=@true
 
 	ref params = @@(@http_context,"&request/get")
 	ref input_data = get_payload()
@@ -90,19 +50,14 @@ module "Controller"
 
 	@expected_html=contains(tolower(replace(@@(@http_context,"request/headers/HTTP_ACCEPT")," ","")),"text/html")
 	@entity_path=path.concat(@crud_path, @@(@http_context,"request/get/_entities_type"))
-
-	qname=""
-
-	if @@(@http_context,"request/get/_connection")!="" && @@(@http_context,"request/get/_app_group")!="" 
-	{
-		qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
-	}
+	qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
 
 	model_entity = path.concat(@entity_path,"model.dk")
 	controller_entity = path.concat(@entity_path,"controller.dk")
 	
 	if file.exists(model_entity) { include model_entity }
 	else { if not(@auto_crud) { do rise_error(404,"Entidad no definida") }}
+
 
 	if file.exists(controller_entity) { include controller_entity }
 
@@ -123,22 +78,30 @@ module "Controller"
 	}
 
 	ref db=@@(@http_context,"&session/idp/database") 
+	
 	if isnull(db)
 	{
-		if qname=="" { qname=@crudl.qname }
-
-		if @@(@http_context,"$session/user/ids")!="" && @crudl.enable_idreplacement
+		if qname=="" || qname=="@" { qname=@crudl.qname }
+		module
 		{
-			if not(dbr.check_alter_access(@@(@http_context,"&session/user"))) { do rise_error(0,"Usuario no autorizado")}
-			
+			do reset()
+			exception{}
+		}
+	
+		if @@(@http_context,"$session/user/ids")!="" && @@(@http_context,"request/get/ws")!=""
+		{
+
+			if not(dbr.check_alter_access(@@(@http_context,"&session/user"))) { do rise_error(0,"Usuario no autorizado.")}
+
 			ref db=dbr.alter_id(qname,@@(@http_context,"$session/user/uid"),@@(@http_context,"$session/user/name"),@@(@http_context,"$session/user/ids"))
 		}
 		else
 		{
+
 			ref db=dbr.login(qname, @crudl.user,@crudl.pwd)
+			
 		}
 	}
-
 	ref @database=db
 	operation=""
 
@@ -156,7 +119,7 @@ module "Controller"
 	}
 
 	that @view_controller(operation, params)
-
+	
 	switch operation
 	{
 		case "read"
@@ -179,6 +142,7 @@ module "Controller"
 		}
 		case "create"
 		{
+			
 			if isnull(@create) { do rise_error(404,"Operación no admitida") }
 			that @create(db,params,input_data)->*output_data
 		}
@@ -207,7 +171,6 @@ module "Controller"
 		{
 			@"message":last_error()
 		}
-
 		that @fail_view(params, input_data, output_data, error_info)
 	}
 	
