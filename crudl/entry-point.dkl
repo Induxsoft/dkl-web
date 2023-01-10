@@ -1,0 +1,47 @@
+﻿#include "dkli.dkh"
+#!
+
+module "Controller configs"
+{
+	#include "functions.dkh"
+	#include "serialize.dkh"
+	#include "dbr.dkh"
+
+	@base_path = ""
+	@path_root=""
+	
+	//No modifique a menos que sepa lo que está haciendo
+	@dbmvc_path="crudl/"
+	
+	
+	@auto_crud=@true
+
+	@db_engine="MY_SQL"	
+
+	@list_view="list.dk"
+	@form_view="form.dk"
+	@error_view="error.dk"
+
+	@entity_id_blank="_new"
+
+	@dkl_view_ext=".dk"
+	@websencia_ext=".jsnwm"
+
+    @crudl.user=""
+    @crudl.pwd=""
+
+    @path_template_protected=@path_root+"/_protected/default.htt"
+
+    @crudl.enable_idreplacement=@true
+
+    @ws=@@(@http_context,"request/get/ws")
+
+    @crudl.qname=""
+
+	@crudl.access_privilege='
+	{
+		"access":[{"workspace":"'+@ws+'"}]
+	}'
+
+	#include "crudl/controller.dkl"
+}
