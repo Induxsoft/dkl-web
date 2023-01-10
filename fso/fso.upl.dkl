@@ -4,10 +4,15 @@ program "Devkron File System Operations (Dkl FSO) [Upload command]"
 	#!
 	#include "functions.dkh"
 	#include "serialize.dkh"
+    #include "webcl.dkh"
 
     #include "webauth.dkl"
     #include "fso.config.dk"
     #include "fso.dk"
+
+    ref @ziplib = _import_library("System.IO.Compression.ZipFile.dll")
+    do _map_function(@ziplib, "System.IO.Compression.ZipFile", "ExtractToDirectory", "zipToDir","System.String,System.String","void")
+    do _map_function(-1,"System.Convert","FromBase64String","fbase64","System.String","*")
 
     ref p=dklfso.parseRequest()
     
@@ -45,19 +50,24 @@ program "Devkron File System Operations (Dkl FSO) [Upload command]"
     if not(dklfso.auth(obj,@op_id_dkl_fso_upload)){ do rise_error(0,"No está autorizado para subir archivos en esta ubicación") }
     
     ref files=field.obj(@http_context,"request/files")
-
+    
     if list.count(files)<1 { do rise_error(0,"No se han enviado archivos") }
-
+    //do file.wtext("filess.txt", to.json(files))
     ref fres=record.create()
 
     for i=0;i<list.count(files)
     {
         ref f=list.obj(files,i)
+
+        rpath = ppath
+        //============= Files in folder
+        if contains(@@(f,"field"),"/"){ rpath = path.concat(ppath,dir.name(@@(f,"field")))}
+        //=============
         
         fres<field.str(f,"filename")+"*">:record.create()
         au=@true
 
-        if file.exists(path.concat(ppath,field.str(f,"filename")))
+        if file.exists(path.concat(rpath,field.str(f,"filename")))
         {
             if not(dklfso.auth(dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri")),@op_id_dkl_fso_upload)) 
             {
@@ -66,7 +76,7 @@ program "Devkron File System Operations (Dkl FSO) [Upload command]"
             }
         }
 
-        if au && isanyword(tolower(file.extension(path.concat(ppath,field.str(f,"filename")))),tolower(@dklfso_danger_files_ext))
+        if au && isanyword(tolower(file.extension(path.concat(rpath,field.str(f,"filename")))),tolower(@dklfso_danger_files_ext))
         {
             if not(dklfso.auth(dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri")),@op_id_dkl_fso_danger)) 
             {
@@ -75,7 +85,49 @@ program "Devkron File System Operations (Dkl FSO) [Upload command]"
             }
         }
 
-        if au { do file.copy(field.str(f,"temp_file"),path.concat(ppath,field.str(f,"filename"))) }
+        // ensure creating folder if not exist
+        do dir.ensure(rpath)
+        // copy
+        if au { do file.copy(field.str(f,"temp_file"),path.concat(rpath,field.str(f,"filename"))) }
+        
+        // Upload Zip and extract
+        if file.extension(field.str(f,"field"))==".zip"+@dklfso_id_process_file || file.extension(field.str(f,"field"))==".rar"+@dklfso_id_process_file
+        {
+            if not(dklfso.auth(dklfso.createObjectInfo(@@(p,"base_path"),@@(p,"uri")),@op_id_dkl_fso_zip)) 
+            {
+                au=@false
+                fres<field.str(f,"filename")+"/message">:"No autorizado"
+            }
+            else
+            {
+                do zipToDir(path.concat(rpath,field.str(f,"filename")), rpath)
+                exception{}
+                do file.delete(path.concat(rpath,field.str(f,"filename")))
+            }
+        }
+
+        // Upload websencia file and process
+        if file.extension(field.str(f,"field"))==".jsnwm"+@dklfso_id_process_file
+        {
+            ref dataws = from.json(file.rtext(path.concat(rpath,field.str(f,"filename"))))
+            out_zip = path.concat(rpath,file.justname(field.str(f,"filename")))+".zip"
+
+            if field.exist(dataws,"_system"){ do field.remove(dataws,"_system") }
+
+            new h { @"Content-Type":"application/json" }
+
+            sresponse=http.request("https://websencia.dev/build/","POST",h,to.base64(to.json(dataws)))
+            do file.wtext("ressss.txt", sresponse)
+
+            ref dt=from.json(sresponse)
+            do http.download(path.concat("https://websencia.dev",replace(@@(dt,"filename"),"./","")), out_zip)
+
+            do zipToDir(out_zip, rpath)
+            exception{}
+            do file.delete(out_zip)
+            do file.delete(path.concat(rpath,field.str(f,"filename")))
+        }
+
         exception
         {
             au=@false

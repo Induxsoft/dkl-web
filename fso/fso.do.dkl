@@ -9,6 +9,8 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
     #include "fso.config.dk"
     #include "fso.dk"
 
+    do _map_function(-1,"System.IO.Directory","Delete","dir.delete2","System.String,System.Boolean","void")
+
     dklfso.copyFile::&p, &obj, &post_data, &uris, i,has_filename
     {
         if @@(obj,"type")=="folder" { do rise_error(0,"Not implemented")}
@@ -95,7 +97,7 @@ program "Devkron File System Operations (Dkl FSO) [Do command]"
                 case "delete"
                 {
                     if not(dklfso.auth(obj,@op_id_dkl_fso_delete)) { do rise_error(0,"No autorizado") }
-                    if @@(obj,"type")=="folder" { do dir.delete(path.concat(@@(p,"base_path"),resource_uri)) }
+                    if @@(obj,"type")=="folder" { do dir.delete2(path.concat(@@(p,"base_path"),resource_uri),@true) }
                     else 
                     { 
                         do file.delete(path.concat(@@(p,"base_path"),resource_uri)) 

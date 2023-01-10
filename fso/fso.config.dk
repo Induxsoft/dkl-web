@@ -9,6 +9,7 @@ module "Devkron File System Operations (Dkl FSO) [Configuration]"
     @dklfso_privs_ext="._p_"    // Extensión para archivos de privilegios
 
     @dklfso_danger_files_ext=".dkl,.dkh" //Extensiones de archivos peligrosas (requieren permiso especial)
+    @dklfso_id_process_file="*" // Identificador para procesar un archivo. Ej. zip(descomprimir), websencia(generar archivos)
 
     @dklfso_protected_dir="_protected"  // Carpeta protegida de los sitios Web
     @dklfso_protected_dir_restricted=@false //Si es @true, se restringe el acceso a la carpeta protegida
