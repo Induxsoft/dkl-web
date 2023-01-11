@@ -111,10 +111,10 @@ module "website"
 
     for i=0;i<list.count(@INCLUDE_LIST)
     {
-        if not(field.exist(@WEB_SITE_LOADED_FILES,list.str(@INCLUDE_LIST,i)))
+        if not(field.exist(@WEB_SITE_LOADED_FILES,md5(list.str(@INCLUDE_LIST,i))))
         {
             include list.str(@INCLUDE_LIST,i)
-            @WEB_SITE_LOADED_FILES<list.str(@INCLUDE_LIST,i)>:"loaded"
+            @WEB_SITE_LOADED_FILES<md5(list.str(@INCLUDE_LIST,i))>:list.str(@INCLUDE_LIST,i)
         }
     }
 
