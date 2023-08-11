@@ -85,7 +85,7 @@ module "view.dkl"
 		}
 	}
 
-	@url_redir=""
+	if not(isset("@url_redir")){@url_redir=""}
 
 	parse_redir::&params, &input_data, &output_data, &error_info
 	{
@@ -126,13 +126,11 @@ module "view.dkl"
         if @table_name=="" { @table_name=entity.safe_id(@@(params,"_entities_type")) }
 
 		uri=list.str(split(@@(@http_context,"request/headers/REQUEST_URI"),"?"),0)
-		//do rise_error(0,uri)
 		if uri!="" 
 		{ 
 			if substring(uri,length(uri)-1,1)=="/" { uri=substring(uri,0,length(uri)-1)}
 		}
 		
-		//do rise_error(0,uri)
 		if @@(params,"$_entity_id")!="" { uri=dir.name(uri) }
 
 		uri=replace(path.concat(uri,"?_select="+@@(output_data,"$"+@keyfield)+"&_key="+@keyfield),"\\","/")
@@ -181,10 +179,10 @@ module "view.dkl"
 			{
 				case ".dk"
 				{
-					// do rise_error(888, file)
 					html=runscript(file,"crud_context",context)
-					if file.exists(@path_template_protected) && not(isnull(error_info)){
-						// #include "web/r8-catalogs.ws.induxsoft.net/_protected/default.dk"//@path_template_protected
+					
+					if file.exists(@path_template_protected) && not(isnull(error_info))
+					{
 						  @http_context<"response/text">:html
 						  html=ftext(file.rtext(@path_template_protected))	
 					}
