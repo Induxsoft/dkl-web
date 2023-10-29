@@ -10,6 +10,20 @@ module "Controller configs"
 	@base_path = ""
 	@path_root=""
 	
+	// Enmascaramiento de enrutamiento (Ejemplos)
+	// Definición de patrones de rutas con base en parámetros GET (request/get)
+	// do crudl.routes.pattern("/module/submodule/process/subprocess/")
+
+	// Comparación de rutas entrantes y asignación de parámetro _entities_type
+	// if crudl.routes.entity("inventario/movimientos/entrada/confirmar/","inventario-movs.entrada-confirmar")
+    // {
+    //    //Si es la ruta indicada, esto es @true y se asigna _entities_type
+    // }
+	// if crudl.route("inventario/movimientos/entrada/confirmar/")
+	// {
+    //    //Si es la ruta indicada esto es @true pero no se modifica _entities_type
+    // }
+
 	//No modifique a menos que sepa lo que está haciendo
 	@dbmvc_path="crudl/"
 	
