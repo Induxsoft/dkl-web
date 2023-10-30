@@ -6,6 +6,7 @@ module "Controller configs"
 	#include "functions.dkh"
 	#include "serialize.dkh"
 	#include "dbr.dkh"
+	#include "crudl/crudl.dk"
 
 	@base_path = ""
 	@path_root=""

@@ -1,0 +1,82 @@
+#include "dkli.dkh"
+#!
+module "crudl"
+{
+    ref @_crudl.internal.patterns=list.create()
+
+    #!
+    _crudl.internal.firstChar::s
+    {
+        if s=="" { return "" }
+        return substring(s,0,1)
+    }
+
+    #!
+    _crudl.internal.lastChar::s
+    {
+        if s=="" { return "" }
+        return substring(s,length(s)-1,1)
+    }
+
+    #!
+    crudl.routes.pattern::pattern
+    {
+        pattern=trim(tolower(pattern))
+        if pattern=="" { return }
+
+        if _crudl.internal.lastChar(pattern)=="/" { pattern=trim(substring(pattern,0,length(pattern)-1)) }
+        if _crudl.internal.firstChar(pattern)=="/" { pattern=trim(substring(pattern,1,length(pattern)-1)) }
+
+        if pattern=="" { return }
+
+        do list.add(@_crudl.internal.patterns,pattern)
+
+    }
+
+    #!
+    crudl.routes.resolve::
+    {
+        route=""
+        for i=0;i<@count(@_crudl.internal.patterns)
+        {
+            ref parts=split(list.str(@_crudl.internal.patterns,i),"/")
+            for j=0;j<@count(parts)
+            {
+                p=trim(@@(@http_context,"$request/get/"+list.str(parts,j)))
+                if p=="" { break }
+                route=route+p+"/"
+            }
+        }
+        if _crudl.internal.lastChar(route)=="/" { route=trim(substring(route,0,length(route)-1)) }
+        return tolower(route)
+    }
+
+    #!
+    crudl.routes.entity::route,entity
+    {
+        route=trim(tolower(route))
+        if route=="" { return 0 }
+
+        if _crudl.internal.lastChar(route)=="/" { route=trim(substring(route,0,length(route)-1)) }
+        if _crudl.internal.firstChar(route)=="/" { route=trim(substring(route,1,length(route)-1)) }
+
+        if route=="" { return 0 }
+
+        if tolower(route)==crudl.routes.resolve()
+        {
+            if trim(entity)!="" { @http_context<"request/get/_entities_type">:entity }
+            return 1
+        }
+
+        return 0
+    }
+
+    #!
+    crudl.route::route
+    {
+        return crudl.routes.entity(route,"")
+    }
+
+}
+
+    
