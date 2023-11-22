@@ -35,7 +35,7 @@ module "UIElements"
 
         ##
         "#<field.dstr(params,'element','select')>"(id="#<field.dstr(params,'id','dbSelect_'+uuid())>" '#<htmlAttributesFromRec(field.dobj(params,"attributes",@null))>'="dbselect")
-        {
+        {$""
             ##
 
             if field.dstr(params,"first_value","")!="" && field.dstr(params,"first_text","")!=""
