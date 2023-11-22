@@ -1,7 +1,7 @@
 #include "dkli.dkh"
 #!
 
-program
+module "Extensiones DBR para MySQL"
 {
 
 	dbr.check_alter_access::&user
@@ -50,5 +50,26 @@ program
 		do dbr.close(db)
 
 		return dbr.reconnect(qname, ids)
+	}
+
+	module ":dbr.security"
+	{
+		// Con base en los grupos a los que pertenece el usuario conectado, 
+		// determina si tiene el privilegio indicado.
+		isauth::&db, privid
+		{
+			sql="select ifnull(ug.sys_pk,0) 
+				from sitem si inner join profile p on p.item=si.sys_pk inner join user_usergroup_ ug on ug.groups=p.usergroup inner join sys_session ses on ses.iuser=ug.users
+				where ses.sys_guid=@sid and si.itemid=@privid and ifnull(ses.sys_deleted,0)=0 limit 1;"
+			
+			new p
+			{
+				@"sid":dbr.getSID(db)
+				@"privid":privid
+			}
+
+			return dbr.num(db,sql,p)
+			exception { return 0 }
+		}
 	}
 }
