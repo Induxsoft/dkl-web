@@ -325,6 +325,11 @@ module "Entity.dk"
                 ref rw=record.copy(rw,field.str(info,"fields"))
             }
 
+            if field.dstr(info,"alias","")!=""
+            {
+                ref rw=record.copyex(rw,"*",",",field.str(info,"alias"),":")
+            }
+
             if not(field.exist(rw,field.str(info,"joinfield")))
             {
                 rw<field.str(info,"joinfield")>:masterkey
