@@ -77,6 +77,16 @@ module "crudl"
         return crudl.routes.entity(route,"")
     }
 
+    #!
+    crudl.database::
+	{
+		ref db = @null
+
+		if isset("@http_context") { ref db = @@(@http_context,"&session/idp/database") }
+		else if isset("@crud_context") { ref db = @@(@crud_context,"&http/session/idp/database") }
+
+		return db
+	}
 }
 
     
