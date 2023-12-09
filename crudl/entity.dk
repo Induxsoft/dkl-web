@@ -53,7 +53,7 @@ module "Entity.dk"
     {
         @keyfield=entity.safe_id(field.dstr(params,"_key",@keyfield))
         if @table_name=="" { @table_name=entity.safe_id(@@(params,"_entities_type")) }
-        ref create_data=record.copyex(data,@null,@create_fields,",",@create_alias_fields,",")
+        ref create_data=record.copyex(data,@null,@create_fields,",",@create_alias_fields,":")
     
         //Limpiar create_data de los campos que sean 'childs'
         if not(isnull(@childs))
@@ -136,7 +136,7 @@ module "Entity.dk"
     {
         @keyfield=entity.safe_id(field.dstr(params,"_key",@keyfield))
         if @table_name=="" { @table_name=entity.safe_id(@@(params,"_entities_type")) }
-        ref update_data=record.copyex(data,@null,@update_fields,",",@update_alias_fields,",")
+        ref update_data=record.copyex(data,@null,@update_fields,",",@update_alias_fields,":")
 
         //Limpiar create_data de los campos que sean 'childs'
         if not(isnull(@childs))
