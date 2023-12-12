@@ -1,0 +1,81 @@
+#include "dkli.dkh"
+#!
+program "createsite"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+
+    @templates_path="_templates/sites"
+    @sites_path="web"
+
+    copydir::source,dest
+    {
+        ref files=list.files(source,"*.*")
+        ref dirs=list.dirs(source)
+
+        do dir.ensure(dest)
+
+        for i=0;i<@count(files)
+        {
+            filedest=path.concat(dest, file.name(list.str(files,i)))
+            do file.copy(list.str(files,i),filedest)
+            do print(filedest)
+            exception
+            {
+                do print(last_error())
+            }
+        }
+        for i=0;i<@count(dirs)
+        {
+            dirdest=path.concat(dest, file.name(list.str(dirs,i)))
+            do copydir(list.str(dirs,i),dirdest)
+        }
+    }
+
+    print_error::err
+    {
+        do print("")
+        do print("-  ERROR -")
+        do print(err)
+        do print("------------------------------------------------------------")
+        do print("")
+        do print("- USO DE LA HERRAMIENTA -")
+        do print("./dkl createsite nombre_plantilla host_sitio_web")
+        do print("")
+        do print("Ejemplo:")
+        do print("\t./dkl createsite blank subdominio.dominio.com")
+        do print("Donde:")
+        do print("\t blank=Es la plantilla de sitio Web vacío")
+        do print("\t subdominio.dominio.com=Es El nombre de host para el nuevo sitio Web")
+        do print("------------------------------------------------------------")
+    }
+
+    arg1=""
+    arg2=""
+    codeblock
+    {
+        ref args=list.create_from_fields( commandline(":") )
+        arg1=trim(list.str(args,1))
+        arg2=trim(list.str(args,2))
+        exception{}
+    }
+
+    if arg1=="" || arg2=="" 
+    { 
+        do rise_error(0,"Faltan parámetros.")
+    }
+    source=path.concat(@templates_path,arg1)
+    target=path.concat(@sites_path,arg2)
+
+    if not(dir.exists(source))
+    {
+        do rise_error(0,"No existe la plantilla indicada '"+arg1+"'")
+    }
+
+    do copydir(source,target)
+    exception
+    {
+        do print_error(last_error())
+    }
+    
+}

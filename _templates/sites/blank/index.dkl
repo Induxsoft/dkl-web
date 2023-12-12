@@ -1,0 +1,6 @@
+﻿#set "meta-xml-declaration" "<!DOCTYPE html>\r\n"
+index
+{
+    h1{$"Página de inicio"}
+    p{$"Sitio Web vacío"}
+}
