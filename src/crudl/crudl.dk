@@ -3,6 +3,7 @@
 module "crudl"
 {
     ref @_crudl.internal.patterns=list.create()
+    @crudl_routes_json="routes.json"
 
     #!
     _crudl.internal.firstChar::s
@@ -87,6 +88,36 @@ module "crudl"
 
 		return db
 	}
+
+    #!
+    crudl.loadRoutesJSON::
+    {
+        routes_file=path.concat(@path_root,@base_path)
+    	routes_file=path.concat(routes_file,@crudl_routes_json)
+
+        if file.exists(routes_file)
+        {
+            ref patterns=from.json(file.rtext(routes_file))
+            for i=0;i<@count(patterns)
+            {
+                ref pattern=@item(patterns,i)
+                if trim(@@(pattern,"pattern"))!=""
+                {
+                    do crudl.routes.pattern(trim(@@(pattern,"pattern")))
+                    ref routes=@@(pattern,"&routes") 
+                    for j=0;j<@count(routes)
+                    {
+                        ref route=@item(routes,j)
+                        if trim(@@(route,"route"))!="" && trim(@@(route,"entity_type"))!=""
+                        {
+                            do crudl.routes.entity(trim(@@(route,"route")),trim(@@(route,"entity_type")))
+                        }
+                    }
+                }
+            }
+            exception{}
+        }
+    }
 }
 
     

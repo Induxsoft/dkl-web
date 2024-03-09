@@ -25,6 +25,8 @@ module "Controller configs"
     //    //Si es la ruta indicada esto es @true pero no se modifica _entities_type
     // }
 
+	do crudl.loadRoutesJSON()
+
 	//No modifique a menos que sepa lo que está haciendo
 	@dbmvc_path="crudl/"
 	
