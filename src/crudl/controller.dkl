@@ -37,12 +37,50 @@ module "crudl.dkl"
 
 		return @null
 	}
+
+	@_control_field_prefix="---"
+
+    is_control_field::name
+    {
+        if length(name)>length(@_control_field_prefix) 
+        { 
+            if substring(name,0,3)==@_control_field_prefix { return @true }
+        }
+
+        return @false
+    }
+
+    move_control_fields::&a,&b
+    {
+        if isnull(a) || isnull(b) { return }
+        ref l=list.create_from_fields(a)
+        for i=0;i<list.count(l)
+        {
+            if is_control_field(list.str(l,i)) 
+            { 
+                if isnull(field.obj(a,list.str(l,i)))
+                { b<list.str(l,i)+"*">: @null }
+                else
+                {
+                    switch field.typeof(a,list.str(l,i))
+                    {
+                        case 1 { b<list.str(l,i)>:field.str(a,list.str(l,i)) }
+                        case 2 { b<list.str(l,i)>:field.num(a,list.str(l,i)) }
+                        case 3 { b<list.str(l,i)+"*">:field.obj(a,list.str(l,i)) }
+                    }
+                }
+                do field.remove(a,list.str(l,i))
+            }
+        }
+    }
 	
 	@crud_path= path.concat(@path_root, @base_path) //Ubicación de los archivos de modelo de entidades
 	@auto_crud=@true
 
 	ref params = @@(@http_context,"&request/get")
 	ref input_data = get_payload()
+	do move_control_fields(input_data,params)
+
 	ref output_data=@null
 	ref db=@null
 

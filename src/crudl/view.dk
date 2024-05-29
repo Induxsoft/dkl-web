@@ -117,6 +117,14 @@ module "view.dkl"
 	redirect :: &params, &input_data, &output_data, &error_info
 	{
 		if @@(@http_context,"$response/headers/Location")!="" { return }
+
+		if @url_redir==""
+		{
+			if @@(params,"$_from_url_e")!="" { @url_redir=urldcode(@@(params,"$_from_url_e")) }
+			else if @@(params,"$---from_url")!="" { @url_redir=@@(params,"$---from_url") }
+			exception{}
+		}
+
 		if @url_redir!=""
 		{
 			@http_context<"response/headers/Location">: parse_redir(params, input_data, output_data, error_info)
