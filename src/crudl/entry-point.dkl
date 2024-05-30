@@ -25,9 +25,11 @@ module "Controller configs"
     //    //Si es la ruta indicada esto es @true pero no se modifica _entities_type
     // }
 
-	do crudl.loadRoutesJSON()
 
 	//No modifique a menos que sepa lo que está haciendo
+	do crudl.load_config()
+	do crudl.loadRoutesJSON()
+	
 	@dbmvc_path="crudl/"
 	
 	
@@ -47,7 +49,11 @@ module "Controller configs"
     @crudl.user=""
     @crudl.pwd=""
 
-    @path_template_protected=@path_root+"/_protected/default.htt"
+	if not(isset("@path_template_protected")) 
+	{ 
+		@path_template_protected=path.concat(@base_path, @path_root) 
+		@path_template_protected=path.concat(@path_template_protected,"_protected/default.htt")
+	}
 
     @crudl.enable_idreplacement=@true
 

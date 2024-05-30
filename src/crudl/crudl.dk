@@ -20,6 +20,41 @@ module "crudl"
     }
 
     #!
+    crudl.config_file::path
+    {
+        if path=="" { return "" }
+        if _crudl.internal.lastChar(path)=="/" || _crudl.internal.lastChar(path)=="\\"
+        {
+            path=substring(path,0,length(path)-1)
+        }
+
+        path=path+".crudl"
+
+        if isset("@http_context")
+        {
+            host=field.dstr(@http_context,"request/headers/http_host",field.dstr(@http_context,"request/headers/SERVER_NAME","localhost"))
+            cfg_file=path.concat("_config",host)
+            cfg_file=path.concat(cfg_file,path)
+            if file.exists(cfg_file) { return cfg_file }
+        }
+
+        cfg_file=path.concat("_config",path)
+        if file.exists(cfg_file) { return cfg_file }
+
+        if file.exists(path) { return path }
+        return ""
+    }
+
+    #!
+    crudl.load_config::
+    {
+        f=crudl.config_file(@path_root)
+        if f=="" { return }
+        ref @crudl_config=from.json(file.rtext(f))
+        exception { do pop_exception() }
+    }
+
+    #!
     crudl.routes.pattern::pattern
     {
         pattern=trim(tolower(pattern))

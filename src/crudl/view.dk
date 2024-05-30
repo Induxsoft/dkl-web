@@ -6,6 +6,33 @@ module "view.dkl"
 	#!
 	parse_view_file::file
 	{
+		original_file=file
+		custom_file=""
+
+		if isset("@crudl_config") && isset("@entity_name")
+		{
+			if not(isnull(@crudl_config))
+			{
+				custom_file=@@(@crudl_config,"$entities/"+@entity_name+"/views/"+file.name(file))
+				if custom_file!="" { file=custom_file }
+				exception { do pop_exception() }
+
+				pt=@@(@crudl_config,"$entities/"+@entity_name+"/httm_template")
+				if pt!="" { @path_template_protected=pt  }
+				else
+				{
+					pt=@@(@crudl_config,"$httm_template")
+					if pt!="" { @path_template_protected=pt  }
+				}
+			}
+		}
+
+		if not(isset("@path_template_protected")) 
+		{ 
+			@path_template_protected=path.concat(@base_path, @path_root) 
+			@path_template_protected=path.concat(@path_template_protected,"_protected/default.htt")
+		}
+
 		if contains(file,"$")
 		{
 			//Notación de vista en archivo de Websencia
@@ -13,6 +40,15 @@ module "view.dkl"
 			vn=list.str(split(file,"$"),1)
 
 			if file.extension(fn)=="" { fn=fn+@websencia_ext }
+			if custom_file!=""
+			{
+				if file.exists(fn)
+				{
+					return fn+"$"+vn
+				}
+				file=original_file
+			}
+
 			if file.exists(path.concat(@entity_path,fn))
 			{
 				return path.concat(@entity_path,fn)+"$"+vn
@@ -26,6 +62,12 @@ module "view.dkl"
 		}
 		
 		if file.extension(file)=="" { file=file+@dkl_view_ext }
+		if custom_file!=""
+		{
+			if file.exists(file) { return file }
+			file=original_file
+		}
+
 		if file.exists(path.concat(@entity_path,file))
 		{
 			return path.concat(@entity_path,file)

@@ -87,7 +87,8 @@ module "crudl.dkl"
 	http_method=toupper(@@(@http_context,"request/headers/request_method"))
 
 	@expected_html=contains(tolower(replace(@@(@http_context,"request/headers/HTTP_ACCEPT")," ","")),"text/html")
-	@entity_path=path.concat(@crud_path, @@(@http_context,"request/get/_entities_type"))
+	@entity_name=@@(@http_context,"request/get/_entities_type")
+	@entity_path=path.concat(@crud_path, @entity_name)
 	qname=@@(@http_context,"request/get/_connection")+"@"+@@(@http_context,"request/get/_app_group")
 
 	model_entity = path.concat(@entity_path,"model.dk")
