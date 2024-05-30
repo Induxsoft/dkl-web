@@ -162,10 +162,11 @@ module "view.dkl"
 
 		if @url_redir==""
 		{
-			if @@(params,"$_from_url_e")!="" { params<"---from_url">:urldcode(@@(params,"$_from_url_e")) }
+			if @@(params,"$_from_url_e")!="" { params<"---from_url">:url_dcode(@@(params,"$_from_url_e")) }
+			if @@(params,"$---from_url_e")!="" { params<"---from_url">:url_dcode(@@(params,"$---from_url_e")) }
 			if @@(params,"$---from_url")!="" { @url_redir=@@(params,"$---from_url") }
 
-			exception{}
+			exception{ do pop_exception() }
 		}
 
 		if @url_redir!=""
