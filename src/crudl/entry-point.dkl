@@ -49,13 +49,7 @@ module "Controller configs"
     @crudl.user=""
     @crudl.pwd=""
 
-	if not(isset("@path_template_protected")) 
-	{ 
-		@path_template_protected=path.concat(@base_path, @path_root) 
-		@path_template_protected=path.concat(@path_template_protected,"_protected/default.htt")
-	}
-
-    @crudl.enable_idreplacement=@true
+	@crudl.enable_idreplacement=@true
 
     @ws=@@(@http_context,"request/get/ws")
 
