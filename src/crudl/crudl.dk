@@ -48,7 +48,7 @@ module "crudl"
     #!
     crudl.load_config::
     {
-        f=crudl.config_file(@path_base)
+        f=crudl.config_file(@base_path)
         if f=="" { return }
         ref @crudl_config=from.json(file.rtext(f))
         exception { do pop_exception() }
