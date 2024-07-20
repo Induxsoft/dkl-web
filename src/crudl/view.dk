@@ -4,6 +4,24 @@
 module "view.dkl"
 {
 	#!
+	script_injection::
+	{
+		buffer=""
+		if isset("@crudl_config") && isset("@entity_name")
+		{
+			if not(isnull(@crudl_config))
+			{
+				custom_file=@@(@crudl_config,"$entities/"+@entity_name+"/scripts/"+file.name(file))
+				if custom_file!="" { file=custom_file }
+				if file.exists(custom_file) { buffer=file.rtext(custom_file) }
+				exception { do pop_exception() }
+			}
+		}
+
+		return buffer
+	}
+
+	#!
 	parse_view_file::file
 	{
 		original_file=file
@@ -149,8 +167,10 @@ module "view.dkl"
 		}
 
 		do @context.begin(context)
-		return ftext(@url_redir)
+		url=ftext(@url_redir)
 		do @context.end()
+
+		return url
 
 		exception{return ""}
 	}
@@ -206,6 +226,7 @@ module "view.dkl"
 			@"error*": error_info
 			@"database*": db
 			@"http*":@http_context
+			@"script": script_injection()
 		}
 
 		if not(isnull(error_info))
