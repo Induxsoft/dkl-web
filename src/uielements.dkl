@@ -114,17 +114,17 @@ module "UIElements"
 
             if uie.isSummaryCol(params,cname) && field.exist(row,fname)
             {
-                do uie.updateSummaryCol(params,"summaries/max/"+cname,field.num(row,fname), "max")
-                do uie.updateSummaryCol(params,"summaries/min/"+cname,field.num(row,fname), "min")
-                do uie.updateSummaryCol(params,"summaries/sum/"+cname,field.num(row,fname), "sum")
+                do uie.updateSummaryCol(params,"summaries/max/"+cname,@@(row,"#"+fname), "max")
+                do uie.updateSummaryCol(params,"summaries/min/"+cname,@@(row,"#"+fname), "min")
+                do uie.updateSummaryCol(params,"summaries/sum/"+cname,@@(row,"#"+fname), "sum")
 
                 params<"summaries/avg/"+cname>:uie.avg(field.dnum(params,"summaries/sum/"+cname,0),field.dnum(params,"summaries/count",0))
 
                 if key!=""
                 {
-                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/max/"+cname,field.num(row,fname), "max")
-                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/min/"+cname,field.num(row,fname), "min")
-                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/sum/"+cname,field.num(row,fname), "sum")
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/max/"+cname,@@(row,"#"+fname), "max")
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/min/"+cname,@@(row,"#"+fname), "min")
+                    do uie.updateSummaryCol(params,"summaries/groups/"+key+"/sum/"+cname,@@(row,"#"+fname), "sum")
 
                     params<"summaries/groups/"+key+"/avg/"+cname>:uie.avg(field.dnum(params,"summaries/groups/"+key+"/sum/"+cname,0),field.dnum(params,"summaries/groups/"+key+"/count",0))
                 }
@@ -145,24 +145,23 @@ module "UIElements"
         {
             case "sum"
             {
-                target<field_target>:value+field.num(target,field_target)
+                target<field_target> : value + @@(target,"#"+field_target)
             }
             case "max"
             {
-                if value>field.num(target,field_target)
+                if value > @@(target,"#"+field_target)
                 {
-                    target<field_target>:value
+                    target<field_target> : value
                 }
             }
             case "min"
             {
-                if value<field.num(target,field_target)
+                if value < @@(target,"#"+field_target)
                 {
-                    target<field_target>:value
+                    target<field_target> : value
                 }
             }
         }
-
     }
 
     #!
