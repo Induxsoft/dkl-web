@@ -293,7 +293,7 @@ module "UIElements.dbTable"
                             else
                             {
                                 //Es un formato numérico
-                                cell<"text">:format(field.num(row,fname),fmt)
+                                cell<"text">:format(@@(row,"#"+fname),fmt)
                             }
                         }
                     }
