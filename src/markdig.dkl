@@ -1,0 +1,23 @@
+#include "dkli.dkh"
+#!
+module ""
+{
+    /*
+    Este archivo proporciona funciones a Devkron que se mapean a métodos de
+    la biblioteca MarkDig Copyright (c) 2018-2019, Alexandre Mutel BSD 2-Clause "Simplified" License
+    
+    Vea: https://github.com/xoofx/markdig
+    */
+    
+    //Cargar el ensamblado
+    ref markdig_lib=_import_library("Markdig.dll")
+
+    //Mapear métodos
+    do _map_function(markdig_lib, "Markdig.Markdown", "ToHtml", "_md2html","System.String,*Markdig.MarkdownPipeline,*Markdig.MarkdownParserContext","$")
+
+    md2html::md
+    {
+        return _md2html(md,@null,@null)
+    }
+
+}
