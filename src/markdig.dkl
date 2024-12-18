@@ -10,14 +10,19 @@ module ""
     */
     
     //Cargar el ensamblado
-    ref markdig_lib=_import_library("Markdig.dll")
-
+    ref @markdig_lib=_import_library("Markdig.dll")
+    
     //Mapear métodos
-    do _map_function(markdig_lib, "Markdig.Markdown", "ToHtml", "_md2html","System.String,*Markdig.MarkdownPipeline,*Markdig.MarkdownParserContext","$")
+    do _map_function(@markdig_lib, "Markdig.Markdown", "ToHtml", "_md2html","System.String,*Markdig.MarkdownPipeline,*Markdig.MarkdownParserContext","$")
+    do _map_function(@markdig_lib, "Markdig.MarkdownExtensions", "UseAdvancedExtensions", "useadvext","*Markdig.MarkdownPipelineBuilder","*")
+    do _map_function(@markdig_lib, "Markdig.MarkdownPipelineBuilder", "Build", "pipebuild","void","*")
+
+    ref @markdig_pipes_builder=useadvext(_new(@markdig_lib,"Markdig.MarkdownPipelineBuilder"))
+    ref @markdig_pipesline=_invoke(@markdig_pipes_builder,"pipebuild")
 
     md2html::md
     {
-        return _md2html(md,@null,@null)
+        return _md2html(md,@markdig_pipesline,@null)
     }
 
 }
