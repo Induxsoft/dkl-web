@@ -6,15 +6,19 @@ module "crudl.dkl"
 	#include "entity.dk"
 	#include "view.dk"
 	#include "webauth.dkl"
+	#include "crudl/mysql.dbr.dkh"
+
 	
-	#!
-	switch @db_engine
-	{
-		case "MY_SQL"
-		{
-			include "crudl/mysql.dbr.dkh"
-		}
-	}
+	// #!
+	// switch @db_engine
+	// {
+	//	case "MY_SQL"
+	// 	{
+	// 		include "crudl/mysql.dbr.dkh"
+	// 	}
+	// }
+	
+
 	do _map_function(@lib_dbr,"induxsoft.Connections.Manager","ResetStorage","reset","void","void")
 
 	
