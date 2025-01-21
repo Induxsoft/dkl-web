@@ -211,6 +211,7 @@ module "UIElements.dbTable"
     #!
     uie.dbTableRow::&params,&row
     {
+        ref row=record.copy(row,"*")
         row<"_row_type">:"detail"
         
         ref cnames=list.create_from_fields(field.obj(params,"columns"))
@@ -333,6 +334,7 @@ module "UIElements.dbTable"
     #!
     uie.dbTableBeginGroup::&params,&row
     {
+        ref row=record.copy(row,"*")
         row<"_row_type">:"header_group"
 
         ref attr=@null
@@ -411,6 +413,8 @@ module "UIElements.dbTable"
     uie.dbTableSummaryGroup::&params,&row
     {
         ref cnames=list.create_from_fields(field.obj(params,"columns"))
+        ref row=record.copy(row,"*")
+
         row<"_row_type">:"summary_group"
 
         if field.exist(params,"rows_attributes")
