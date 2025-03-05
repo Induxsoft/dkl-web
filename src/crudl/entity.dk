@@ -325,7 +325,7 @@ module "Entity.dk"
 
             if field.dstr(info,"alias","")!=""
             {
-                ref rw=record.copyex(rw,"*",",",field.str(info,"alias"),":")
+                ref rw=record.copyex(rw,@null,"*",",",field.str(info,"alias"),":")
             }
 
             if not(field.exist(rw,field.str(info,"joinfield")))
