@@ -250,6 +250,20 @@ program "updatesite"
         return ""
     }
 
+    // 1 si el registro del sitio marca la ruta como modificada a mano
+    us.mod.registrado::rel
+    {
+        if isnull(@us_reg) { return 0 }
+        if not(field.exist(@us_reg, "files")) { return 0 }
+        ref fl = field.obj(@us_reg, "files")
+        for i=0; i<@count(fl)
+        {
+            ref x = @item(fl, i)
+            if @@(x, "$path") == rel { return field.dnum(x, "modificado", 0) }
+        }
+        return 0
+    }
+
     us.en.historial::&e, h
     {
         if not(field.exist(e, "history")) { return @false }
@@ -589,6 +603,7 @@ program "updatesite"
         ref reg_files = list.create()
         ref run_copiados = list.create()
         ref run_reemplazados = list.create()
+        reg_cambia = @false
 
         for i=0; i<@count(plan)
         {
@@ -664,6 +679,12 @@ program "updatesite"
                 }
                 if reg_mod { rf<"modificado">: 1 }
                 do list.add(reg_files, rf)
+                // El registro también se reescribe si cambia lo que dice de un archivo
+                // (por ejemplo, la marca de modificado a mano), aunque no se copie nada.
+                if reg_sha != previo { reg_cambia = @true }
+                mod_n = 0
+                if reg_mod { mod_n = 1 }
+                if mod_n != us.mod.registrado(rel) { reg_cambia = @true }
             }
 
             exception
@@ -677,6 +698,7 @@ program "updatesite"
         if cambios > 0 { escribir = @true }
         if not(hay_registro) { escribir = @true }
         if version_reg != version { escribir = @true }
+        if reg_cambia { escribir = @true }
 
         do print("")
         if not(escribir)

@@ -49,7 +49,7 @@ Solo trabaja sobre los archivos que lista el manifiesto de la plantilla. Para ca
 
 - **Nunca borra** archivos del sitio que no estén en el manifiesto (código del cliente, páginas sueltas, imágenes).
 - **Respaldo:** antes de reemplazar, copia el archivo a `web/<host>/_protected/_respaldo/<AAAAMMDD-HHMMSS>/<ruta>`. En esa carpeta deja también `_updatesite.json` (qué se copió y qué se reemplazó) y la copia del registro anterior. Si ya existe una carpeta con esa fecha, agrega `-2`, `-3`…
-- **Registro:** al terminar escribe `web/<host>/_protected/site.installed.json`. Si no hubo cambios y el registro ya tenía esa versión, no escribe nada: una segunda corrida no cambia el sitio.
+- **Registro:** al terminar escribe `web/<host>/_protected/site.installed.json`. Si no hubo cambios, el registro ya tenía esa versión y lo que dice de cada archivo no cambió (huella y marca de modificado), no escribe nada: una segunda corrida no cambia el sitio. Un archivo que pasa a «modificado a mano» (o deja de estarlo) sí reescribe el registro, aunque no se copie nada.
 - Si el registro dice que el sitio se instaló con otra plantilla, se detiene.
 - Si el `sha256` del manifiesto no es el del archivo de la plantilla, avisa (manifiesto desactualizado) y usa el del archivo.
 
