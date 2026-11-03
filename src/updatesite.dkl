@@ -64,6 +64,20 @@ program "updatesite"
         do print(t)
     }
 
+    // Mensaje de error sin lo que agrega Devkron: "{código} " al inicio y "[Ln= n]" al final
+    us.msg::e
+    {
+        t = e
+        if findstr(t, "{") == 0
+        {
+            p = findstr(t, "} ")
+            if p > 0 { t = substring(t, p + 2, length(t) - p - 2) }
+        }
+        p = findstr(t, "[Ln=")
+        if p > 0 { t = trim(substring(t, 0, p)) }
+        return t
+    }
+
     us.aviso::ruta, msg
     {
         @n_avisos = @n_avisos + 1
@@ -118,7 +132,7 @@ program "updatesite"
         return 0
         exception
         {
-            do us.aviso("", "no se pudo preparar SHA-256 de .NET (" + last_error() + "); se usa sha256sum")
+            do us.aviso("", "no se pudo preparar SHA-256 de .NET (" + us.msg(last_error()) + "); se usa sha256sum")
             @hash_modo = "exec"
         }
     }
@@ -589,7 +603,7 @@ program "updatesite"
             exception
             {
                 p<"accion">: "error"
-                p<"detalle">: last_error()
+                p<"detalle">: us.msg(last_error())
             }
         }
 
@@ -700,7 +714,7 @@ program "updatesite"
 
             exception
             {
-                do us.error(rel, last_error())
+                do us.error(rel, us.msg(last_error()))
             }
         }
 
@@ -838,7 +852,7 @@ program "updatesite"
                 }
                 exception
                 {
-                    do us.error(rel, last_error())
+                    do us.error(rel, us.msg(last_error()))
                 }
             }
         }
@@ -882,7 +896,7 @@ program "updatesite"
                 }
                 exception
                 {
-                    do us.error(rel, last_error())
+                    do us.error(rel, us.msg(last_error()))
                 }
             }
         }
@@ -918,7 +932,7 @@ program "updatesite"
         exception
         {
             @fatal = @true
-            do us.uso(last_error())
+            do us.uso(us.msg(last_error()))
         }
     }
     if @fatal { do us.salir(2) }
@@ -953,7 +967,7 @@ program "updatesite"
         {
             @n_errores = @n_errores + 1
             do print("")
-            do print("ERROR: " + last_error())
+            do print("ERROR: " + us.msg(last_error()))
         }
     }
 
