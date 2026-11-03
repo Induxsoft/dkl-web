@@ -65,7 +65,7 @@ Si hubo varias actualizaciones, se revierten de la más reciente a la más vieja
 
 ## Sitios sin registro
 
-Los sitios creados antes de `updatesite` no tienen `site.installed.json`. Para ellos cuenta el historial del manifiesto: si su archivo coincide con alguna versión publicada, se reemplaza; si no, se reporta. Como protección, si **ninguno** de los archivos que ya existen coincide con una versión publicada, se detiene sin cambiar nada (probablemente es otra plantilla). `adoptar` lo deja seguir: aun así no toca los modificados, solo copia los que faltan.
+Los sitios creados antes de `updatesite` no tienen `site.installed.json`. Para ellos cuenta el historial del manifiesto: si su archivo coincide con alguna versión publicada, se reemplaza; si no, se reporta. Como protección, si **la mitad o más** de los archivos que ya existen no coinciden con ninguna versión publicada, se detiene sin cambiar nada (probablemente es otra plantilla). No basta con que coincida uno: `v12` y `v12-content-site` comparten tres archivos idénticos (`auth.dk`, `ext.map`, `routing.dk`), y `updatesite v12-content-site` sobre un sitio `v12` sin registro le copiaba `index.dkl` y lo registraba como `v12-content-site`. `adoptar` lo deja seguir: aun así no toca los modificados, solo copia los que faltan.
 
 `createsite` ya escribe el registro al crear el sitio (desde el manifiesto de la plantilla) y no copia `site.manifest` al sitio.
 

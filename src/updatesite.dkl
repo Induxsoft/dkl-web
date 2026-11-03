@@ -593,10 +593,21 @@ program "updatesite"
             }
         }
 
-        // Sin registro, el sitio tiene que parecerse a la plantilla
-        if not(hay_registro) && existentes > 0 && reconocidos == 0 && not(@adoptar)
+        // Sin registro, el sitio tiene que parecerse a la plantilla: la mayoría de los
+        // archivos que ya existen deben coincidir con una versión publicada. Dos plantillas
+        // pueden compartir archivos idénticos (v12 y v12-content-site comparten auth.dk,
+        // ext.map y routing.dk), así que no basta con que coincida uno.
+        if not(hay_registro) && existentes > 0 && not(@adoptar)
         {
-            do rise_error(0, "Ningún archivo del sitio coincide con una versión publicada de la plantilla '" + @arg_plantilla + "'. Revise que sea la plantilla correcta; para actualizarlo de todos modos agregue 'adoptar'")
+            desconocidos = existentes - reconocidos
+            if reconocidos == 0
+            {
+                do rise_error(0, "Ningún archivo del sitio coincide con una versión publicada de la plantilla '" + @arg_plantilla + "'. Revise que sea la plantilla correcta; para actualizarlo de todos modos agregue 'adoptar'")
+            }
+            if desconocidos >= reconocidos
+            {
+                do rise_error(0, "Solo " + str(reconocidos) + " de los " + str(existentes) + " archivos del sitio coinciden con una versión publicada de la plantilla '" + @arg_plantilla + "'. Revise que sea la plantilla correcta; para actualizarlo de todos modos agregue 'adoptar'")
+            }
         }
 
         // Segunda pasada: aplicar
