@@ -7,6 +7,9 @@ program "createsite"
 
     @templates_path="_templates/sites"
     @sites_path="web"
+    @manifest_name="site.manifest"
+    @installed_rel="_protected/site.installed.json"
+    @template_root=""
 
     copydir::source,dest
     {
@@ -17,9 +20,15 @@ program "createsite"
 
         for i=0;i<@count(files)
         {
-            filedest=path.concat(dest, file.name(list.str(files,i)))
-            do file.copy(list.str(files,i),filedest)
-            do print(filedest)
+            // El manifiesto de la plantilla (updatesite) no va al sitio: quedaría público en su raíz
+            copiar=@true
+            if source==@template_root && file.name(list.str(files,i))==@manifest_name { copiar=@false }
+            if copiar
+            {
+                filedest=path.concat(dest, file.name(list.str(files,i)))
+                do file.copy(list.str(files,i),filedest)
+                do print(filedest)
+            }
             exception
             {
                 do print(last_error())
@@ -29,6 +38,49 @@ program "createsite"
         {
             dirdest=path.concat(dest, file.name(list.str(dirs,i)))
             do copydir(list.str(dirs,i),dirdest)
+        }
+    }
+
+    // Registro del sitio para updatesite: lo que se acaba de copiar, según el manifiesto de la plantilla
+    write_installed::source,target,template
+    {
+        manifest=path.concat(source,@manifest_name)
+        if not(file.exists(manifest)) { return 0 }
+
+        ref m=from.json(file.rtext(manifest))
+        ref files=list.create()
+        if field.exist(m,"files")
+        {
+            ref mf=field.obj(m,"files")
+            for i=0;i<@count(mf)
+            {
+                ref e=@item(mf,i)
+                new f
+                {
+                    @"path": trim(@@(e,"$path"))
+                    @"sha256": trim(@@(e,"$sha256"))
+                }
+                do list.add(files,f)
+            }
+        }
+        ref ahora=now()
+        fecha=date_str(ahora,"yyyy-MM-dd HH:mm:ss")
+        new reg
+        {
+            @"template": template
+            @"version": trim(@@(m,"$version"))
+            @"date": fecha
+        }
+        reg<"files*">: files
+
+        installed=path.concat(target,@installed_rel)
+        do dir.ensure(dir.name(installed))
+        do file.wtext(installed,to.json(reg))
+        do print(installed)
+        return 0
+        exception
+        {
+            do print("No se pudo escribir el registro del sitio (" + @installed_rel + "): " + last_error())
         }
     }
 
@@ -72,7 +124,9 @@ program "createsite"
         do rise_error(0,"No existe la plantilla indicada '"+arg1+"'")
     }
 
+    @template_root=source
     do copydir(source,target)
+    do write_installed(source,target,arg1)
     exception
     {
         do print_error(last_error())
