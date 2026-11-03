@@ -45,7 +45,23 @@ program "createsite"
     write_installed::source,target,template
     {
         manifest=path.concat(source,@manifest_name)
-        if not(file.exists(manifest)) { return 0 }
+        if not(file.exists(manifest))
+        {
+            // Plantilla sin site.manifest (v12-comandas, v12-kcfdi…): el registro lleva solo la plantilla, para que
+            // updatev12 no la deduzca por el contenido (confundía comandas con v12 y el kiosco con v12-content-site)
+            ref ahora0=now()
+            fecha0=date_str(ahora0,"yyyy-MM-dd HH:mm:ss")
+            new minimo
+            {
+                @"template": template
+                @"date": fecha0
+            }
+            installed0=path.concat(target,@installed_rel)
+            do dir.ensure(dir.name(installed0))
+            do file.wtext(installed0,to.json(minimo))
+            do print(installed0)
+            return 0
+        }
 
         ref m=from.json(file.rtext(manifest))
         ref files=list.create()
