@@ -1,0 +1,922 @@
+#include "dkli.dkh"
+#!
+program "updatesite"
+{
+    #include "functions.dkh"
+    #include "serialize.dkh"
+
+    // Actualiza un sitio creado con createsite a la versión actual de su plantilla.
+    // Uso: ./dkl updatesite <plantilla> <host> [simular] [revertir=<fecha>|ultimo] [forzar=<archivo>[,<archivo>]] [hash=net|exec|dk2] [adoptar]
+    // Documentación: docs/updatesite.md del repo Induxsoft/dkl-web.
+
+    @templates_path="_templates/sites"
+    @sites_path="web"
+    @manifest_name="site.manifest"
+    @installed_rel="_protected/site.installed.json"
+    @backup_rel="_protected/_respaldo"
+    @run_info="_updatesite.json"
+
+    @arg_plantilla=""
+    @arg_host=""
+    @arg_revertir=""
+    @forzar_txt="|"
+    @simular=@false
+    @adoptar=@false
+    @hash_modo="net"
+    @hash_listo=@false
+
+    @n_copiados=0
+    @n_reemplazados=0
+    @n_iguales=0
+    @n_modificados=0
+    @n_borrados=0
+    @n_errores=0
+    @n_avisos=0
+
+    @fecha_respaldo=""
+    @dir_respaldo=""
+    ref @us_reg=@null
+
+    // Código de salida del proceso (dkl siempre sale con 0)
+    do _map_function(-1,"System.Environment","Exit","us.salir","System.Int32","void")
+    // Comparación ordinal de cadenas (para elegir el último respaldo)
+    do _map_function(-1,"System.String","CompareOrdinal","us.comparar","System.String, System.String","#")
+
+    // ---------------------------------------------------------------- reporte
+
+    us.pad::s, n
+    {
+        r = s
+        while length(r) < n
+        {
+            r = r + " "
+        }
+        return r
+    }
+
+    us.linea::estado, ruta, detalle
+    {
+        t = "  " + us.pad(estado, 24) + ruta
+        if detalle != ""
+        {
+            t = t + "  (" + detalle + ")"
+        }
+        do print(t)
+    }
+
+    us.aviso::ruta, msg
+    {
+        @n_avisos = @n_avisos + 1
+        do us.linea("AVISO", ruta, msg)
+    }
+
+    us.error::ruta, msg
+    {
+        @n_errores = @n_errores + 1
+        do us.linea("ERROR", ruta, msg)
+    }
+
+    us.uso::err
+    {
+        do print("")
+        do print("-  ERROR -")
+        do print(err)
+        do print("------------------------------------------------------------")
+        do print("")
+        do print("- USO DE LA HERRAMIENTA -")
+        do print("./dkl updatesite nombre_plantilla host_sitio_web [simular] [revertir=fecha|ultimo] [forzar=archivo] [hash=net|exec|dk2] [adoptar]")
+        do print("")
+        do print("Ejemplos:")
+        do print("\t./dkl updatesite v12 subdominio.dominio.com simular")
+        do print("\t./dkl updatesite v12 subdominio.dominio.com")
+        do print("\t./dkl updatesite v12 subdominio.dominio.com forzar=_protected/render.dk")
+        do print("\t./dkl updatesite v12 subdominio.dominio.com revertir=20261102-143005")
+        do print("Donde:")
+        do print("\t v12=Es la plantilla (carpeta de _templates/sites) con su site.manifest")
+        do print("\t subdominio.dominio.com=Es el host del sitio (carpeta de web/)")
+        do print("\t simular=Solo reporta, no cambia nada")
+        do print("\t revertir=Restaura el respaldo indicado (_protected/_respaldo/<fecha>)")
+        do print("\t forzar=Reemplaza ese archivo aunque se haya modificado a mano (con respaldo)")
+        do print("\t hash=Forma de calcular sha256: net (.NET, por omisión), exec (sha256sum) o dk2 (hash.dkh de Devkron 2.0.1+)")
+        do print("\t adoptar=Actualiza aunque ningún archivo del sitio coincida con una versión publicada")
+        do print("------------------------------------------------------------")
+    }
+
+    // ---------------------------------------------------------------- sha256
+
+    us.hash.preparar::
+    {
+        if @hash_listo { return 0 }
+        @hash_listo = @true
+        if @hash_modo == "net"
+        {
+            // hmacsha256 carga el ensamblado de criptografía de .NET, que es donde vive SHA256
+            x = hmacsha256("updatesite", "updatesite")
+            do _map_function(-1,"System.Security.Cryptography.SHA256","HashData","us.net.sha256","*System.Byte[]","*")
+            do _map_function(-1,"System.Convert","ToHexString","us.net.hex","*System.Byte[]","$")
+        }
+        return 0
+        exception
+        {
+            do us.aviso("", "no se pudo preparar SHA-256 de .NET (" + last_error() + "); se usa sha256sum")
+            @hash_modo = "exec"
+        }
+    }
+
+    // Devkron 1 y 2: SHA256.HashData y Convert.ToHexString (.NET 5 o posterior)
+    us.sha256.net::ruta
+    {
+        ref b = file.rbytes(ruta)
+        ref d = us.net.sha256(b)
+        h = tolower(us.net.hex(d))
+        return h
+        exception { return "" }
+    }
+
+    // Respaldo: el programa sha256sum del sistema (Linux)
+    us.sha256.exec::ruta
+    {
+        salida = trim(exec("sha256sum", "\"" + ruta + "\"", @true))
+        if length(salida) < 64 { return "" }
+        h = tolower(substring(salida, 0, 64))
+        return h
+        exception { return "" }
+    }
+
+    // Devkron 2.0.1 o posterior: hash.dkh (se incluye en ejecución solo con hash=dk2)
+    us.sha256.dk2::ruta
+    {
+        h = tolower(hash.sha256_file(ruta))
+        return h
+        exception { return "" }
+    }
+
+    us.sha256::ruta
+    {
+        do us.hash.preparar()
+        h = ""
+        if @hash_modo == "net"
+        {
+            h = us.sha256.net(ruta)
+            if length(h) != 64
+            {
+                h = us.sha256.exec(ruta)
+                if length(h) == 64
+                {
+                    do us.aviso("", "SHA-256 de .NET no respondió; desde aquí se usa sha256sum")
+                    @hash_modo = "exec"
+                }
+            }
+        }
+        else if @hash_modo == "dk2"
+        {
+            h = us.sha256.dk2(ruta)
+        }
+        else
+        {
+            h = us.sha256.exec(ruta)
+        }
+        if length(h) != 64 { do rise_error(0, "No se pudo calcular el sha256 de '" + ruta + "'") }
+        return h
+    }
+
+    // ---------------------------------------------------------------- utilerías
+
+    us.leer.json::ruta
+    {
+        ref r = from.json(file.rtext(ruta))
+        return r
+        exception { return @null }
+    }
+
+    us.copiar::origen, destino
+    {
+        do dir.ensure(dir.name(destino))
+        do file.copy(origen, destino)
+    }
+
+    // Plantilla y host: un solo nombre de carpeta, sin rutas
+    us.validar.nombre::valor, que
+    {
+        if valor == "." || contains(valor, "/") || contains(valor, "\\") || contains(valor, "..")
+        {
+            do rise_error(0, "El nombre de " + que + " no es válido: '" + valor + "'")
+        }
+        return 0
+    }
+
+    // Rutas del manifiesto: relativas, con "/" y sin salir de la carpeta
+    us.ruta.valida::rel
+    {
+        if rel == "" { return @false }
+        if substring(rel, 0, 1) == "/" { return @false }
+        if contains(rel, "..") { return @false }
+        if contains(rel, "\\") { return @false }
+        if contains(rel, ":") { return @false }
+        return @true
+    }
+
+    us.normalizar::rel
+    {
+        r = trim(replace(rel, "\\", "/"))
+        while findstr(r, "./") == 0
+        {
+            r = substring(r, 2, length(r) - 2)
+        }
+        while findstr(r, "/") == 0
+        {
+            r = substring(r, 1, length(r) - 1)
+        }
+        return r
+    }
+
+    us.forzado::rel
+    {
+        if findstrex(@forzar_txt, "|" + rel + "|", @true) >= 0 { return @true }
+        return @false
+    }
+
+    // sha256 que el registro del sitio tiene para la ruta ("" si no hay)
+    us.sha.registrado::rel
+    {
+        if isnull(@us_reg) { return "" }
+        if not(field.exist(@us_reg, "files")) { return "" }
+        ref fl = field.obj(@us_reg, "files")
+        for i=0; i<@count(fl)
+        {
+            ref x = @item(fl, i)
+            if @@(x, "$path") == rel { return tolower(@@(x, "$sha256")) }
+        }
+        return ""
+    }
+
+    us.en.historial::&e, h
+    {
+        if not(field.exist(e, "history")) { return @false }
+        ref hl = field.obj(e, "history")
+        for i=0; i<@count(hl)
+        {
+            if tolower(trim(list.str(hl, i))) == h { return @true }
+        }
+        return @false
+    }
+
+    us.respaldo.dir::sitio
+    {
+        if @dir_respaldo != "" { return @dir_respaldo }
+        raiz = path.concat(sitio, @backup_rel)
+        ref ahora = now()
+        base_nombre = date_str(ahora, "yyyyMMdd-HHmmss")
+        nombre = base_nombre
+        n = 1
+        while dir.exists(path.concat(raiz, nombre))
+        {
+            n = n + 1
+            nombre = base_nombre + "-" + str(n)
+        }
+        @fecha_respaldo = nombre
+        @dir_respaldo = path.concat(raiz, nombre)
+        if not(@simular) { do dir.ensure(@dir_respaldo) }
+        return @dir_respaldo
+    }
+
+    us.ultimo.respaldo::raiz
+    {
+        if not(dir.exists(raiz)) { do rise_error(0, "El sitio no tiene respaldos de updatesite (" + raiz + ")") }
+        ref dirs = list.dirs(raiz)
+        ultimo = ""
+        for i=0; i<@count(dirs)
+        {
+            nombre = file.name(list.str(dirs, i))
+            if file.exists(path.concat(path.concat(raiz, nombre), @run_info))
+            {
+                if ultimo == ""
+                {
+                    ultimo = nombre
+                }
+                else if us.comparar(nombre, ultimo) > 0
+                {
+                    ultimo = nombre
+                }
+            }
+        }
+        if ultimo == "" { do rise_error(0, "El sitio no tiene respaldos de updatesite (" + raiz + ")") }
+        return ultimo
+    }
+
+    // ---------------------------------------------------------------- argumentos
+
+    us.args::
+    {
+        ref args = commandline(":")
+        ref claves = list.create_from_fields(args)
+        posicion = 0
+        // El elemento 0 es el nombre del programa (igual que en createsite)
+        for i=1; i<list.count(claves)
+        {
+            k = trim(list.str(claves, i))
+            v = ""
+            if k != ""
+            {
+                if not(contains(k, "/")) { v = trim(field.str(args, k)) }
+            }
+            nombre = k
+            valor = v
+            p = findstr(k, "=")
+            if p > 0
+            {
+                nombre = substring(k, 0, p)
+                valor = trim(substring(k, p + 1, length(k) - p - 1))
+            }
+            nombre = tolower(trim(nombre))
+            es_opcion_dkl = @false
+            if length(nombre) > 1
+            {
+                if substring(nombre, 0, 2) == "--"
+                {
+                    nombre = substring(nombre, 2, length(nombre) - 2)
+                }
+                else if substring(nombre, 0, 1) == "-"
+                {
+                    // opciones del intérprete: -hide-log, -encoding:utf8, ...
+                    es_opcion_dkl = @true
+                }
+            }
+
+            if nombre == "" || es_opcion_dkl
+            {
+                // nada
+            }
+            else if nombre == "simular"
+            {
+                @simular = @true
+            }
+            else if nombre == "adoptar"
+            {
+                @adoptar = @true
+            }
+            else if nombre == "revertir"
+            {
+                if valor == "" { do rise_error(0, "revertir requiere la fecha del respaldo (revertir=AAAAMMDD-HHMMSS o revertir=ultimo)") }
+                @arg_revertir = valor
+            }
+            else if nombre == "forzar"
+            {
+                if valor == "" { do rise_error(0, "forzar requiere la ruta del archivo (forzar=_protected/render.dk)") }
+                ref partes = split(valor, ",")
+                for j=0; j<@count(partes)
+                {
+                    f = us.normalizar(list.str(partes, j))
+                    if f != "" { @forzar_txt = @forzar_txt + f + "|" }
+                }
+            }
+            else if nombre == "hash"
+            {
+                @hash_modo = tolower(valor)
+                if @hash_modo != "net" && @hash_modo != "exec" && @hash_modo != "dk2"
+                {
+                    do rise_error(0, "hash debe ser net, exec o dk2")
+                }
+            }
+            else if p < 0 && v == ""
+            {
+                if posicion == 0
+                {
+                    @arg_plantilla = k
+                }
+                else if posicion == 1
+                {
+                    @arg_host = k
+                }
+                else
+                {
+                    do rise_error(0, "Argumento de más: '" + k + "'")
+                }
+                posicion = posicion + 1
+            }
+            else
+            {
+                do rise_error(0, "Argumento no reconocido: '" + k + "'")
+            }
+        }
+        return 0
+    }
+
+    // ---------------------------------------------------------------- actualizar
+
+    us.actualizar::
+    {
+        tpl = path.concat(@templates_path, @arg_plantilla)
+        sitio = path.concat(@sites_path, @arg_host)
+
+        if not(dir.exists(tpl)) { do rise_error(0, "No existe la plantilla indicada '" + @arg_plantilla + "' (" + tpl + ")") }
+        if not(dir.exists(sitio)) { do rise_error(0, "No existe el sitio '" + sitio + "'. Para crearlo: ./dkl createsite " + @arg_plantilla + " " + @arg_host) }
+
+        archivo_manifiesto = path.concat(tpl, @manifest_name)
+        if not(file.exists(archivo_manifiesto)) { do rise_error(0, "La plantilla '" + @arg_plantilla + "' no tiene " + @manifest_name) }
+        ref m = us.leer.json(archivo_manifiesto)
+        if isnull(m) { do rise_error(0, archivo_manifiesto + " no es un JSON válido") }
+        if not(field.exist(m, "files")) { do rise_error(0, archivo_manifiesto + " no tiene la lista 'files'") }
+        ref files = field.obj(m, "files")
+        version = trim(@@(m, "$version"))
+
+        // Registro del sitio
+        archivo_reg = path.concat(sitio, @installed_rel)
+        hay_registro = @false
+        version_reg = ""
+        fecha_reg = ""
+        if file.exists(archivo_reg)
+        {
+            ref @us_reg = us.leer.json(archivo_reg)
+            if isnull(@us_reg)
+            {
+                do us.aviso(@installed_rel, "no es un JSON válido; se trata el sitio como si no tuviera registro")
+            }
+            else
+            {
+                hay_registro = @true
+                version_reg = trim(@@(@us_reg, "$version"))
+                fecha_reg = trim(@@(@us_reg, "$date"))
+                plantilla_reg = trim(@@(@us_reg, "$template"))
+                if plantilla_reg != ""
+                {
+                    if tolower(plantilla_reg) != tolower(@arg_plantilla)
+                    {
+                        do rise_error(0, "El sitio se instaló con la plantilla '" + plantilla_reg + "', no con '" + @arg_plantilla + "'")
+                    }
+                }
+            }
+        }
+
+        do print("updatesite: plantilla " + @arg_plantilla + " " + version + " -> " + sitio)
+        if hay_registro
+        {
+            do print("registro:   " + @arg_plantilla + " " + version_reg + " del " + fecha_reg)
+        }
+        else
+        {
+            do print("registro:   no tiene (primera vez con updatesite)")
+        }
+        if @simular { do print("modo:       SIMULACIÓN, no se cambia nada") }
+        do print("")
+
+        // Archivos forzados que no están en el manifiesto
+        rutas_manifiesto = "|"
+        for i=0; i<@count(files)
+        {
+            ref e0 = @item(files, i)
+            rutas_manifiesto = rutas_manifiesto + trim(@@(e0, "$path")) + "|"
+        }
+        ref forz = split(@forzar_txt, "|")
+        for i=0; i<@count(forz)
+        {
+            f = list.str(forz, i)
+            if f != ""
+            {
+                if findstrex(rutas_manifiesto, "|" + f + "|", @true) < 0
+                {
+                    do us.error(f, "forzar: no está en el manifiesto de la plantilla")
+                }
+            }
+        }
+
+        // Primera pasada: decidir qué hacer con cada archivo, sin tocar nada
+        ref plan = list.create()
+        existentes = 0
+        reconocidos = 0
+        for i=0; i<@count(files)
+        {
+            new p
+            {
+                @"path": ""
+                @"accion": "error"
+                @"sha": ""
+                @"anterior": ""
+                @"previo": ""
+                @"detalle": ""
+            }
+            do list.add(plan, p)
+
+            ref e = @item(files, i)
+            rel = trim(@@(e, "$path"))
+            sha_m = tolower(trim(@@(e, "$sha256")))
+            p<"path">: rel
+
+            if not(us.ruta.valida(rel))
+            {
+                p<"detalle">: "ruta no válida en el manifiesto"
+            }
+            else
+            {
+                origen = path.concat(tpl, rel)
+                destino = path.concat(sitio, rel)
+                previo = us.sha.registrado(rel)
+                p<"previo">: previo
+
+                if not(file.exists(origen))
+                {
+                    p<"detalle">: "falta en la plantilla"
+                }
+                else
+                {
+                    sha_o = us.sha256(origen)
+                    p<"sha">: sha_o
+                    if sha_m != sha_o
+                    {
+                        do us.aviso(rel, "el manifiesto está desactualizado: su sha256 no es el del archivo de la plantilla")
+                    }
+
+                    if not(file.exists(destino))
+                    {
+                        p<"accion">: "copiar"
+                    }
+                    else
+                    {
+                        existentes = existentes + 1
+                        sha_d = us.sha256(destino)
+                        p<"anterior">: sha_d
+                        if sha_d == sha_o
+                        {
+                            reconocidos = reconocidos + 1
+                            p<"accion">: "igual"
+                        }
+                        else
+                        {
+                            conocido = @false
+                            if sha_d == sha_m { conocido = @true }
+                            if previo != ""
+                            {
+                                if sha_d == previo { conocido = @true }
+                            }
+                            if not(conocido)
+                            {
+                                if us.en.historial(e, sha_d) { conocido = @true }
+                            }
+
+                            if conocido { reconocidos = reconocidos + 1 }
+
+                            if us.forzado(rel)
+                            {
+                                p<"accion">: "forzar"
+                            }
+                            else if conocido
+                            {
+                                p<"accion">: "reemplazar"
+                            }
+                            else
+                            {
+                                p<"accion">: "modificado"
+                            }
+                        }
+                    }
+                }
+            }
+
+            exception
+            {
+                p<"accion">: "error"
+                p<"detalle">: last_error()
+            }
+        }
+
+        // Sin registro, el sitio tiene que parecerse a la plantilla
+        if not(hay_registro) && existentes > 0 && reconocidos == 0 && not(@adoptar)
+        {
+            do rise_error(0, "Ningún archivo del sitio coincide con una versión publicada de la plantilla '" + @arg_plantilla + "'. Revise que sea la plantilla correcta; para actualizarlo de todos modos agregue 'adoptar'")
+        }
+
+        // Segunda pasada: aplicar
+        ref reg_files = list.create()
+        ref run_copiados = list.create()
+        ref run_reemplazados = list.create()
+
+        for i=0; i<@count(plan)
+        {
+            ref p = @item(plan, i)
+            rel = @@(p, "$path")
+            accion = @@(p, "$accion")
+            sha_o = @@(p, "$sha")
+            previo = @@(p, "$previo")
+            reg_sha = sha_o
+            reg_mod = @false
+
+            if accion == "copiar"
+            {
+                if not(@simular) { do us.copiar(path.concat(tpl, rel), path.concat(sitio, rel)) }
+                new rc
+                {
+                    @"path": rel
+                    @"sha256": sha_o
+                }
+                do list.add(run_copiados, rc)
+                @n_copiados = @n_copiados + 1
+                do us.linea("copiado", rel, "")
+            }
+            else if accion == "reemplazar" || accion == "forzar"
+            {
+                if not(@simular)
+                {
+                    d = us.respaldo.dir(sitio)
+                    do us.copiar(path.concat(sitio, rel), path.concat(d, rel))
+                    do us.copiar(path.concat(tpl, rel), path.concat(sitio, rel))
+                }
+                new rr
+                {
+                    @"path": rel
+                    @"sha256_anterior": @@(p, "$anterior")
+                    @"sha256": sha_o
+                }
+                do list.add(run_reemplazados, rr)
+                @n_reemplazados = @n_reemplazados + 1
+                if accion == "forzar"
+                {
+                    do us.linea("reemplazado (forzado)", rel, "")
+                }
+                else
+                {
+                    do us.linea("reemplazado", rel, "")
+                }
+            }
+            else if accion == "igual"
+            {
+                @n_iguales = @n_iguales + 1
+                do us.linea("igual", rel, "")
+            }
+            else if accion == "modificado"
+            {
+                @n_modificados = @n_modificados + 1
+                reg_sha = previo
+                reg_mod = @true
+                do us.linea("modificado a mano", rel, "no se tocó; para reemplazarlo: forzar=" + rel)
+            }
+            else
+            {
+                reg_sha = previo
+                do us.error(rel, @@(p, "$detalle"))
+            }
+
+            if rel != ""
+            {
+                new rf
+                {
+                    @"path": rel
+                    @"sha256": reg_sha
+                }
+                if reg_mod { rf<"modificado">: 1 }
+                do list.add(reg_files, rf)
+            }
+
+            exception
+            {
+                do us.error(rel, last_error())
+            }
+        }
+
+        cambios = @n_copiados + @n_reemplazados
+        escribir = @false
+        if cambios > 0 { escribir = @true }
+        if not(hay_registro) { escribir = @true }
+        if version_reg != version { escribir = @true }
+
+        do print("")
+        if not(escribir)
+        {
+            do print("Sin cambios: el sitio ya tiene la versión " + version + " de la plantilla.")
+            return 0
+        }
+
+        ref ahora = now()
+        fecha = date_str(ahora, "yyyy-MM-dd HH:mm:ss")
+        new reg
+        {
+            @"template": @arg_plantilla
+            @"version": version
+            @"date": fecha
+        }
+        reg<"files*">: reg_files
+
+        if @simular
+        {
+            if cambios > 0 { do print("Se respaldaría en " + us.respaldo.dir(sitio)) }
+            do print("Se escribiría " + archivo_reg)
+            return 0
+        }
+
+        if cambios > 0
+        {
+            d = us.respaldo.dir(sitio)
+            registro_previo = @false
+            if hay_registro
+            {
+                do us.copiar(archivo_reg, path.concat(d, @installed_rel))
+                registro_previo = @true
+            }
+            new info
+            {
+                @"fecha": @fecha_respaldo
+                @"date": fecha
+                @"template": @arg_plantilla
+                @"version_anterior": version_reg
+                @"version": version
+                @"registro_previo": registro_previo
+            }
+            info<"copiados*">: run_copiados
+            info<"reemplazados*">: run_reemplazados
+            do file.wtext(path.concat(d, @run_info), to.json(info))
+            do print("Respaldo: " + d + "   (para deshacer: ./dkl updatesite " + @arg_plantilla + " " + @arg_host + " revertir=" + @fecha_respaldo + ")")
+        }
+
+        do dir.ensure(dir.name(archivo_reg))
+        do file.wtext(archivo_reg, to.json(reg))
+        do print("Registro: " + archivo_reg)
+        return 0
+    }
+
+    // ---------------------------------------------------------------- revertir
+
+    us.revertir::
+    {
+        sitio = path.concat(@sites_path, @arg_host)
+        if not(dir.exists(sitio)) { do rise_error(0, "No existe el sitio '" + sitio + "'") }
+        raiz = path.concat(sitio, @backup_rel)
+
+        fecha = @arg_revertir
+        if tolower(fecha) == "ultimo" || tolower(fecha) == "último" { fecha = us.ultimo.respaldo(raiz) }
+        d = path.concat(raiz, fecha)
+        if not(dir.exists(d)) { do rise_error(0, "No existe el respaldo '" + d + "'") }
+        archivo_info = path.concat(d, @run_info)
+        if not(file.exists(archivo_info)) { do rise_error(0, d + " no es un respaldo de updatesite (falta " + @run_info + ")") }
+        ref info = us.leer.json(archivo_info)
+        if isnull(info) { do rise_error(0, archivo_info + " no es un JSON válido") }
+
+        plantilla_info = trim(@@(info, "$template"))
+        if tolower(plantilla_info) != tolower(@arg_plantilla)
+        {
+            do rise_error(0, "El respaldo es de la plantilla '" + plantilla_info + "', no de '" + @arg_plantilla + "'")
+        }
+
+        do print("updatesite: revertir " + sitio + " al respaldo " + fecha + " (" + plantilla_info + " " + trim(@@(info, "$version")) + " -> " + trim(@@(info, "$version_anterior")) + ")")
+        if @simular { do print("modo:       SIMULACIÓN, no se cambia nada") }
+        do print("")
+
+        // Archivos reemplazados: vuelve la copia respaldada
+        if field.exist(info, "reemplazados")
+        {
+            ref rl = field.obj(info, "reemplazados")
+            for i=0; i<@count(rl)
+            {
+                ref x = @item(rl, i)
+                rel = trim(@@(x, "$path"))
+                instalado = tolower(trim(@@(x, "$sha256")))
+                if not(us.ruta.valida(rel))
+                {
+                    do us.error(rel, "ruta no válida en " + @run_info)
+                }
+                else
+                {
+                    respaldo = path.concat(d, rel)
+                    destino = path.concat(sitio, rel)
+                    if not(file.exists(respaldo))
+                    {
+                        do us.error(rel, "falta en el respaldo")
+                    }
+                    else
+                    {
+                        sha_r = us.sha256(respaldo)
+                        sha_d = ""
+                        if file.exists(destino) { sha_d = us.sha256(destino) }
+                        if sha_d == sha_r
+                        {
+                            @n_iguales = @n_iguales + 1
+                            do us.linea("igual", rel, "")
+                        }
+                        else if sha_d == "" || sha_d == instalado || us.forzado(rel)
+                        {
+                            if not(@simular) { do us.copiar(respaldo, destino) }
+                            @n_reemplazados = @n_reemplazados + 1
+                            do us.linea("restaurado", rel, "")
+                        }
+                        else
+                        {
+                            @n_modificados = @n_modificados + 1
+                            do us.linea("modificado a mano", rel, "cambió después de la actualización; no se tocó; para restaurarlo: forzar=" + rel)
+                        }
+                    }
+                }
+                exception
+                {
+                    do us.error(rel, last_error())
+                }
+            }
+        }
+
+        // Archivos que la actualización copió (no existían): se quitan si no han cambiado
+        if field.exist(info, "copiados")
+        {
+            ref cl = field.obj(info, "copiados")
+            for i=0; i<@count(cl)
+            {
+                ref x = @item(cl, i)
+                rel = trim(@@(x, "$path"))
+                instalado = tolower(trim(@@(x, "$sha256")))
+                if not(us.ruta.valida(rel))
+                {
+                    do us.error(rel, "ruta no válida en " + @run_info)
+                }
+                else
+                {
+                    destino = path.concat(sitio, rel)
+                    if not(file.exists(destino))
+                    {
+                        @n_iguales = @n_iguales + 1
+                        do us.linea("igual", rel, "ya no existe")
+                    }
+                    else
+                    {
+                        sha_d = us.sha256(destino)
+                        if sha_d == instalado || us.forzado(rel)
+                        {
+                            if not(@simular) { do file.delete(destino) }
+                            @n_borrados = @n_borrados + 1
+                            do us.linea("quitado", rel, "lo había copiado updatesite")
+                        }
+                        else
+                        {
+                            @n_modificados = @n_modificados + 1
+                            do us.linea("modificado a mano", rel, "cambió después de la actualización; no se tocó")
+                        }
+                    }
+                }
+                exception
+                {
+                    do us.error(rel, last_error())
+                }
+            }
+        }
+
+        // Registro del sitio: el que había antes de la actualización
+        archivo_reg = path.concat(sitio, @installed_rel)
+        do print("")
+        if field.dnum(info, "registro_previo", 0) != 0
+        {
+            if not(@simular) { do us.copiar(path.concat(d, @installed_rel), archivo_reg) }
+            do print("Registro restaurado: " + archivo_reg)
+        }
+        else
+        {
+            if not(@simular) { do file.delete(archivo_reg) }
+            do print("Registro quitado (el sitio no tenía antes de la actualización): " + archivo_reg)
+        }
+        return 0
+    }
+
+    // ---------------------------------------------------------------- principal
+
+    @fatal = @false
+    codeblock
+    {
+        do us.args()
+        if @arg_plantilla == "" || @arg_host == ""
+        {
+            do rise_error(0, "Faltan parámetros.")
+        }
+        do us.validar.nombre(@arg_plantilla, "plantilla")
+        do us.validar.nombre(@arg_host, "host")
+        exception
+        {
+            @fatal = @true
+            do us.uso(last_error())
+        }
+    }
+    if @fatal { do us.salir(2) }
+
+    // Devkron 2.0.1+: hash.dkh. Se incluye solo si se pide, porque Devkron 1 no la trae.
+    if @hash_modo == "dk2"
+    {
+        include "hash.dkh"
+    }
+
+    codeblock
+    {
+        if @arg_revertir != ""
+        {
+            do us.revertir()
+        }
+        else
+        {
+            do us.actualizar()
+        }
+        exception
+        {
+            @n_errores = @n_errores + 1
+            do print("")
+            do print("ERROR: " + last_error())
+        }
+    }
+
+    resultado = "OK"
+    if @n_errores > 0 { resultado = "ERROR" }
+    do print("")
+    do print("RESULTADO: " + resultado + "  copiados=" + str(@n_copiados) + " reemplazados=" + str(@n_reemplazados) + " iguales=" + str(@n_iguales) + " modificados=" + str(@n_modificados) + " quitados=" + str(@n_borrados) + " errores=" + str(@n_errores) + " avisos=" + str(@n_avisos) + ifstr(@simular, " (simulación)", ""))
+    if @n_errores > 0 { do us.salir(1) }
+}
