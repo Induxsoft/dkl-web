@@ -99,7 +99,7 @@ DKL no tiene una función de sha256 de archivos común a las dos versiones. `upd
 |---|---|---|
 | `net` (por omisión) | `file.rbytes` + `System.Security.Cryptography.SHA256.HashData` + `System.Convert.ToHexString`, mapeados con `_map_function`. Antes llama a `hmacsha256` para que el ensamblado de criptografía de .NET quede cargado. | Devkron 1 (.NET 5) y Devkron 2 (.NET 10): las dos funciones existen desde .NET 5. |
 | `exec` | El programa `sha256sum` del sistema. | Linux, con cualquier versión de Devkron. |
-| `dk2` | `hash.sha256_file` de `hash.dkh`, que se incluye en tiempo de ejecución solo con esta opción. | Devkron 2.0.1 o posterior. |
+| `dk2` | `hash.sha256_file` de `hash.dkh`, que se incluye en tiempo de ejecución solo con esta opción, a través de `updatesite.hash.dkh` (un archivo incluido con `include` en ejecución se analiza aparte y necesita su propio `#include "dkli.dkh"`, que `hash.dkh` no trae). Si falta `hash.dkh`, termina con error. | Devkron 2.0.1 o posterior. |
 
 Con `net`, si .NET no calcula el sha256 de un archivo y `sha256sum` sí, avisa y sigue con `exec`. En Devkron 1, la criptografía de .NET en Linux necesita libssl 1.1; donde falte, `md5()` y SHA256 pueden tumbar el intérprete sin excepción: ahí se usa `hash=exec`.
 

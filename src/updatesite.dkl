@@ -891,13 +891,23 @@ program "updatesite"
     if @fatal { do us.salir(2) }
 
     // Devkron 2.0.1+: hash.dkh. Se incluye solo si se pide, porque Devkron 1 no la trae.
+    // Va por una envoltura: un include en ejecución necesita su propio dkli.dkh.
+    @hash_falta = @false
     if @hash_modo == "dk2"
     {
-        include "hash.dkh"
+        if file.exists("hash.dkh") && file.exists("updatesite.hash.dkh")
+        {
+            include "updatesite.hash.dkh"
+        }
+        else
+        {
+            @hash_falta = @true
+        }
     }
 
     codeblock
     {
+        if @hash_falta { do rise_error(0, "hash=dk2 necesita hash.dkh (Devkron 2.0.1 o posterior) y updatesite.hash.dkh en la raíz de Devkron; use hash=net o hash=exec") }
         if @arg_revertir != ""
         {
             do us.revertir()

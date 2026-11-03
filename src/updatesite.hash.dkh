@@ -1,0 +1,7 @@
+#include "dkli.dkh"
+#!
+// Envoltura de hash.dkh (Devkron 2.0.1 o posterior) para updatesite con hash=dk2.
+// Un archivo que se incluye con include en ejecución se analiza aparte y necesita su
+// propio #include "dkli.dkh"; hash.dkh está hecho para #include y no lo trae
+// (incluirlo directo da «Definición de elemento incompleta»).
+#include "hash.dkh"
