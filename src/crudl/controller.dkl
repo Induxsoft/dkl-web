@@ -162,6 +162,9 @@ module "crudl.dkl"
 	}
 
 	that @view_controller(operation, params)
+
+	//Sin entidad ni modelo no hay nada que atender (URL de carpeta que no está en routes.json)
+	if @entity_name=="" && not(file.exists(model_entity)) { do rise_error(404,"Elemento no encontrado") }
 	
 	switch operation
 	{
